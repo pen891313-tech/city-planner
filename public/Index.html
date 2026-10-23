@@ -63,7 +63,7 @@ h3{font-size:15px;margin:16px 0 8px;color:var(--navy)}
 .status.dirty{color:var(--warn);font-weight:700}
 .status.saved{color:var(--ok)}
 .form label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
-.form input,.form textarea{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.form input,.form textarea,.form select{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .form textarea{min-height:56px;resize:vertical}
 .calc{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
 .out{background:#eef2fa;border-radius:8px;padding:8px 10px;font-weight:700;color:var(--navy)}
@@ -93,6 +93,8 @@ table.sum th{background:#e8edf6}
 .modal .title.bad{color:var(--warn)}
 .modal .msg{white-space:pre-line;line-height:1.65}
 .modal label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+.modal select{width:100%;font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.modal input[type=color]{height:44px;padding:2px 4px}
 .modal input{width:100%;font:inherit;font-size:17px;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
 .modal .acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2533;color:#fff;padding:10px 16px;border-radius:8px;z-index:60;font-size:14px}
@@ -156,16 +158,37 @@ const areaM2 = o => { const r=rectOf(o); return r.w*r.h/(PX_PER_M*PX_PER_M); };
 const inside = (inner, outer) => { const a=rectOf(inner), b=rectOf(outer); return a.x>=b.x && a.y>=b.y && a.x+a.w<=b.x+b.w && a.y+a.h<=b.y+b.h; };
 const overlaps = (p, q) => { const a=rectOf(p), b=rectOf(q); return a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h; };
 const hit = (o, p) => { const r=rectOf(o); return p[0]>=r.x && p[0]<=r.x+r.w && p[1]>=r.y && p[1]<=r.y+r.h; };
+const ROADS = [{k:'so',label:'소로',m:8},{k:'jung',label:'중로',m:15},{k:'dae',label:'대로',m:30}];
+const roadGrade = m => m>=25?'대로':m>=12?'중로':'소로';
+function segPtDist(p, a, b){ const dx=b[0]-a[0], dy=b[1]-a[1], L=dx*dx+dy*dy; let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0; t=Math.max(0,Math.min(1,t)); return Math.hypot(p[0]-a[0]-t*dx, p[1]-a[1]-t*dy); }
+function segsCross(a,b,c,d){ const o=(p,q,r)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0])); return o(a,b,c)!==o(a,b,d) && o(c,d,a)!==o(c,d,b); }
+function rectSegDist(o, a, b){ // 사각형과 선분 사이 거리(px)
+  const r=rectOf(o); const inR=p=>p[0]>=r.x&&p[0]<=r.x+r.w&&p[1]>=r.y&&p[1]<=r.y+r.h;
+  if(inR(a)||inR(b)) return 0;
+  const cs=[[r.x,r.y],[r.x+r.w,r.y],[r.x+r.w,r.y+r.h],[r.x,r.y+r.h]];
+  for(let i=0;i<4;i++) if(segsCross(a,b,cs[i],cs[(i+1)%4])) return 0;
+  return Math.min(...cs.map(c=>segPtDist(c,a,b)), ...[a,b].map(p=>Math.hypot(Math.max(r.x-p[0],0,p[0]-r.x-r.w), Math.max(r.y-p[1],0,p[1]-r.y-r.h))));
+}
+const onRoad = (o, rd) => rectSegDist(o, rd.a, rd.b) < rd.m*PX_PER_M/2 - 0.5;          // 건물이 도로 위에 있음
+const touchRoad = (o, rd) => rectSegDist(o, rd.a, rd.b) <= rd.m*PX_PER_M/2 + 2*PX_PER_M; // 대지가 도로에 닿음(2m 이내)
+const roadGap = (o, rd) => (rectSegDist(o, rd.a, rd.b) - rd.m*PX_PER_M/2)/PX_PER_M; // 도로 경계까지 거리(m)
+const SHAPES = [['box','상자'],['cyl','원기둥'],['tier','계단탑'],['pyr','피라미드'],['dome','돔'],['spire','첨탑']];
+const SHAPE_NAME = Object.fromEntries(SHAPES);
+const bArea = b => { const a=areaM2(b); return (b.shape==='cyl'||b.shape==='dome')? a*Math.PI/4 : a; };
+const bHeight = b => { const r=rectOf(b), base=(b.floors||1)*FLOOR_M; if(b.shape==='dome') return r1(base+Math.min(r.w,r.h)/PX_PER_M/2); if(b.shape==='spire') return r1(base*1.4); return base; };
+const isSpecial = f => f?.special==='yes' && String(f?.specialWhy||'').trim().length>=10;   // 특별건축구역(심의 통과)
+const isSuperTall = b => (b.floors||0)>=50 || bHeight(b)>=200;                                  // 초고층(50층 이상 또는 200m 이상)
+const GKINDS = {park:{label:'공원',fill:'#a8dc9f',edge:'#2e9e5b'}, forest:{label:'숲',fill:'#5fa868',edge:'#2b6e33'}, river:{label:'하천',fill:'#93cdf0',edge:'#3a86c8'}, farm:{label:'농지',fill:'#dfe8a3',edge:'#9aa83a'}};
 const uid = () => Math.random().toString(36).slice(2,9);
-function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function toast(msg){ document.querySelectorAll('.toast').forEach(x=>x.remove()); const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 // 모달: buttons [[label, value, class]], inputs [{k,label,type,value,placeholder}]
 function dialog({title='', msg='', bad=false, inputs=[], buttons=[['확인',true,'primary']]}){
   return new Promise(res=>{
     const m=document.createElement('div'); m.className='modal';
     m.innerHTML=`<div class="card">${title?`<div class="title${bad?' bad':''}">${esc(title)}</div>`:''}<div class="msg">${esc(msg)}</div>
-      ${inputs.map(i=>`<label>${esc(i.label)}</label><input data-k="${i.k}" type="${i.type||'text'}" ${i.type==='number'?'inputmode="numeric" min="1"':''} value="${esc(i.value??'')}" placeholder="${esc(i.placeholder||'')}">`).join('')}
+      ${inputs.map(i=>`<label>${esc(i.label)}</label>${i.type==='select'?`<select data-k="${i.k}">${i.options.map(([v,l])=>`<option value="${esc(v)}" ${v===i.value?'selected':''}>${esc(l)}</option>`).join('')}</select>`:`<input data-k="${i.k}" type="${i.type||'text'}" ${i.type==='number'?'inputmode="numeric" min="1"':''} value="${esc(i.value??'')}" placeholder="${esc(i.placeholder||'')}">`}`).join('')}
       <div class="acts"></div></div>`;
-    const vals=()=>Object.fromEntries([...m.querySelectorAll('input[data-k]')].map(i=>[i.dataset.k,i.value]));
+    const vals=()=>Object.fromEntries([...m.querySelectorAll('[data-k]')].map(i=>[i.dataset.k,i.value]));
     buttons.forEach(([label,val,cls])=>{ const b=document.createElement('button'); b.className='btn '+(cls||''); b.textContent=label; b.onclick=()=>{m.remove();res({btn:val, values:vals()})}; $('.acts',m).appendChild(b); });
     m.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=buttons.find(b=>b[2]==='primary'); if(p){ m.remove(); res({btn:p[1], values:vals()}); } } });
     document.body.appendChild(m);
@@ -211,22 +234,24 @@ async function apiPut(cls, team, body){
 
 /* ============ 규칙 계산 ============ */
 // 조 하나의 대지·건물을 상한과 비교
-function evalTeam(fields, data){
+function evalTeam(fields, data, roads=[]){
   const f=fields||{}, sites=data?.sites||[], bldgs=data?.bldgs||[];
   const capB=num(f.bcr), capF=num(f.far);
   const per = sites.map((s,i)=>({i:i+1, id:s.id, area:areaM2(s), foot:0, gfa:0, n:0}));
   const orphan=[];
-  bldgs.forEach(b=>{ const k=sites.findIndex(s=>inside(b,s)); const fa=areaM2(b);
+  bldgs.forEach(b=>{ const k=sites.findIndex(s=>inside(b,s)); const fa=bArea(b);
     if(k<0){ orphan.push(b); return; } per[k].foot+=fa; per[k].gfa+=fa*b.floors; per[k].n++; });
   per.forEach(p=>{ p.bcr=p.area?p.foot/p.area*100:0; p.far=p.area?p.gfa/p.area*100:0;
     p.overB = capB!=null && p.bcr > capB+1e-9; p.overF = capF!=null && p.far > capF+1e-9; });
   const siteArea=per.reduce((a,p)=>a+p.area,0), foot=per.reduce((a,p)=>a+p.foot,0), gfa=per.reduce((a,p)=>a+p.gfa,0);
   const maxFloors=bldgs.reduce((m,b)=>Math.max(m,b.floors||0),0);
+  const maxH=bldgs.reduce((m,b)=>Math.max(m,bHeight(b)),0);
   const issues=[];
   per.forEach(p=>{ if(p.overB) issues.push(`대지${p.i} 건폐율 ${r1(p.bcr)}% > 상한 ${capB}%`); if(p.overF) issues.push(`대지${p.i} 용적률 ${r1(p.far)}% > 상한 ${capF}%`); });
   if(orphan.length) issues.push(`대지 밖 건물 ${orphan.length}개`);
-  const hl=num(f.hLimit); if(hl!=null && maxFloors*FLOOR_M>hl) issues.push(`높이 ${maxFloors*FLOOR_M}m > 고도 제한 ${hl}m`);
-  return {capB, capF, per, siteArea, foot, gfa, maxFloors, bcrNow: siteArea?foot/siteArea*100:0, farNow: siteArea?gfa/siteArea*100:0, issues, nB:bldgs.length};
+  const hl=isSpecial(f)?null:num(f.hLimit); if(hl!=null && maxH>hl) issues.push(`높이 ${maxH}m > 고도 제한 ${hl}m`);
+  const sb=isSpecial(f)?0:num(f.setback); if(sb!=null && sb>0 && roads.length){ const near=bldgs.filter(b=>roads.some(rd=>roadGap(b,rd) < sb-0.05)); if(near.length) issues.push(`도로에서 ${sb}m 안 띄운 건물 ${near.length}채`); }
+  return {capB, capF, per, siteArea, foot, gfa, maxFloors, maxH, bcrNow: siteArea?foot/siteArea*100:0, farNow: siteArea?gfa/siteArea*100:0, issues, nB:bldgs.length};
 }
 function nationalCap(f){ return CAPS[(f?.zone||'').replace(/\s/g,'')]; }
 
@@ -273,20 +298,77 @@ function drawSite(ctx, s, i, color){
   ctx.restore();
 }
 function drawBldg(ctx, b, color){
-  const r=rectOf(b);
-  ctx.save(); ctx.globalAlpha=.6; ctx.fillStyle=color; ctx.fillRect(r.x,r.y,r.w,r.h); ctx.globalAlpha=1;
-  ctx.lineWidth=2.5; ctx.strokeStyle=shade(color,-.35); ctx.strokeRect(r.x,r.y,r.w,r.h);
-  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  const fs=Math.max(11,Math.min(20,r.w/4,r.h/2.2)); ctx.font=`700 ${fs}px 'Noto Sans KR', sans-serif`;
-  ctx.fillText(`${b.floors}층`, r.x+r.w/2, r.y+r.h/2 - (b.name?fs*.55:0));
-  if(b.name){ ctx.font=`500 ${Math.max(10,fs*.75)}px 'Noto Sans KR', sans-serif`; ctx.fillText(b.name.slice(0,10), r.x+r.w/2, r.y+r.h/2+fs*.6); }
+  const r=rectOf(b), col=b.color||color, round=b.shape==='cyl'||b.shape==='dome';
+  const path=()=>{ ctx.beginPath(); if(round) ctx.ellipse(r.x+r.w/2,r.y+r.h/2,r.w/2,r.h/2,0,0,Math.PI*2); else ctx.rect(r.x,r.y,r.w,r.h); };
+  ctx.save(); ctx.globalAlpha=.62; ctx.fillStyle=col; path(); ctx.fill(); ctx.globalAlpha=1;
+  ctx.lineWidth=2.5; ctx.strokeStyle=shade(col,-.35); path(); ctx.stroke();
+  ctx.lineWidth=1.2;
+  if(b.shape==='pyr'||b.shape==='spire'){ ctx.beginPath(); ctx.moveTo(r.x,r.y); ctx.lineTo(r.x+r.w,r.y+r.h); ctx.moveTo(r.x+r.w,r.y); ctx.lineTo(r.x,r.y+r.h); ctx.stroke(); }
+  if(b.shape==='tier') [0.72,0.48].forEach(k=>ctx.strokeRect(r.x+r.w*(1-k)/2, r.y+r.h*(1-k)/2, r.w*k, r.h*k));
+  if(b.shape==='dome'){ ctx.beginPath(); ctx.ellipse(r.x+r.w/2,r.y+r.h/2,r.w/4,r.h/4,0,0,Math.PI*2); ctx.stroke(); }
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  const fs=Math.max(11,Math.min(20,r.w/4,r.h/2.2)); const sub=b.name || (b.shape&&b.shape!=='box'?SHAPE_NAME[b.shape]:'');
+  const txt=(t,y,size,wt)=>{ ctx.font=`${wt} ${size}px 'Noto Sans KR', sans-serif`; ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.strokeText(t,r.x+r.w/2,y); ctx.fillStyle='#fff'; ctx.fillText(t,r.x+r.w/2,y); };
+  txt(`${b.floors}층`, r.y+r.h/2-(sub?fs*.55:0), fs, 700);
+  if(sub) txt(sub.slice(0,10), r.y+r.h/2+fs*.6, Math.max(10,fs*.75), 500);
+  if(isSuperTall(b)){ ctx.font="700 12px 'Noto Sans KR', sans-serif"; const tw=ctx.measureText('초고층').width+8; ctx.fillStyle='#f2c94c'; ctx.fillRect(r.x+2,r.y+2,tw,17); ctx.fillStyle='#1d2533'; ctx.textAlign='left'; ctx.fillText('초고층', r.x+6, r.y+11); }
   ctx.restore();
 }
-// data: {strokes, sites, bldgs}
+function autoTrees(g){ // 숲·공원 안 나무 (항상 같은 자리)
+  const r=rectOf(g), sp=g.kind==='forest'?42:95, out=[];
+  if(g.kind!=='forest'&&g.kind!=='park') return out;
+  let seed=((Math.round(r.x)*73856093) ^ (Math.round(r.y)*19349663))>>>0;
+  const rnd=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; };
+  for(let y=r.y+sp/2; y<r.y+r.h-6; y+=sp) for(let x=r.x+sp/2; x<r.x+r.w-6; x+=sp){
+    const tx=Math.min(r.x+r.w-8,Math.max(r.x+8,x+(rnd()-.5)*sp*.6)), ty=Math.min(r.y+r.h-8,Math.max(r.y+8,y+(rnd()-.5)*sp*.6));
+    out.push({x:tx, y:ty, s:(g.kind==='forest'?36:32)*(0.8+rnd()*0.5), kind: g.kind==='forest'&&rnd()<.5?'pine':'round'});
+    if(out.length>600) return out;
+  }
+  return out;
+}
+function drawGreen(ctx, g, dots=true){
+  const r=rectOf(g), k=GKINDS[g.kind]||GKINDS.park;
+  ctx.save(); ctx.fillStyle=k.fill; ctx.globalAlpha=.92; ctx.fillRect(r.x,r.y,r.w,r.h); ctx.globalAlpha=1;
+  ctx.beginPath(); ctx.rect(r.x,r.y,r.w,r.h); ctx.clip();
+  if(g.kind==='farm'){ ctx.strokeStyle='rgba(120,140,40,.45)'; ctx.lineWidth=2; for(let x=r.x+8;x<r.x+r.w;x+=14){ ctx.beginPath(); ctx.moveTo(x,r.y); ctx.lineTo(x,r.y+r.h); ctx.stroke(); } }
+  if(g.kind==='river'){ ctx.strokeStyle='rgba(255,255,255,.65)'; ctx.lineWidth=2; for(let y=r.y+14;y<r.y+r.h;y+=22){ ctx.beginPath(); for(let x=r.x;x<=r.x+r.w;x+=8) ctx.lineTo(x, y+Math.sin(x/14)*4); ctx.stroke(); } }
+  if(dots){ ctx.fillStyle=g.kind==='forest'?'rgba(30,90,40,.6)':'rgba(46,130,70,.55)'; autoTrees(g).forEach(t=>{ ctx.beginPath(); ctx.arc(t.x,t.y,t.s/4,0,Math.PI*2); ctx.fill(); }); }
+  ctx.restore();
+  ctx.save(); ctx.strokeStyle=k.edge; ctx.lineWidth=2.5; ctx.strokeRect(r.x,r.y,r.w,r.h);
+  ctx.font="700 15px 'Noto Sans KR', sans-serif"; ctx.textBaseline='top';
+  const t=`${g.name||k.label} · ${fmtN(areaM2(g))}㎡`, tw=ctx.measureText(t).width+8;
+  ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillRect(r.x+4,r.y+4,tw,21); ctx.fillStyle='#1d2533'; ctx.fillText(t, r.x+8, r.y+6);
+  ctx.restore();
+}
+function drawTree2D(ctx,t){ ctx.save(); ctx.fillStyle=t.kind==='pine'?'#2b6e33':'#3f9a4d'; ctx.strokeStyle='#1f5a2a'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(t.p[0],t.p[1],(t.s||40)/4,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore(); }
+function drawRoad(ctx, rd, label=true){
+  const w=rd.m*PX_PER_M;
+  ctx.save(); ctx.lineCap='square'; ctx.strokeStyle='#6b7079'; ctx.lineWidth=w;
+  ctx.beginPath(); ctx.moveTo(rd.a[0],rd.a[1]); ctx.lineTo(rd.b[0],rd.b[1]); ctx.stroke();
+  ctx.lineCap='butt'; ctx.strokeStyle=rd.m>=12?'#f2c94c':'#ffffff'; ctx.lineWidth=rd.m>=25?4:2.5; ctx.setLineDash([18,14]);
+  ctx.beginPath(); ctx.moveTo(rd.a[0],rd.a[1]); ctx.lineTo(rd.b[0],rd.b[1]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  if(label) drawRoadLabel(ctx, rd);
+}
+function drawRoadLabel(ctx, rd){
+  const w=rd.m*PX_PER_M; ctx.save();
+  {
+    const mx=rd.a[0]+(rd.b[0]-rd.a[0])*.22, my=rd.a[1]+(rd.b[1]-rd.a[1])*.22; let ang=Math.atan2(rd.b[1]-rd.a[1], rd.b[0]-rd.a[0]); if(ang>Math.PI/2||ang<-Math.PI/2) ang+=Math.PI;
+    ctx.translate(mx,my); ctx.rotate(ang); ctx.font=`700 ${Math.max(12,Math.min(18,w*.45))}px 'Noto Sans KR', sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const t=`${rd.name?rd.name+' · ':''}${roadGrade(rd.m)} ${rd.m}m`; const tw=ctx.measureText(t).width+12;
+    ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fillRect(-tw/2, -11, tw, 22); ctx.fillStyle='#1d2533'; ctx.fillText(t,0,1);
+  }
+  ctx.restore();
+}
+// data: {strokes, roads, sites, bldgs}
 function drawLayer(ctx, data, color, {bldgs=true}={}){
   ctx.clearRect(0,0,W,H);
   (data?.strokes||[]).forEach(s=>drawStroke(ctx,s));
+  (data?.greens||[]).forEach(g=>drawGreen(ctx,g,bldgs));
+  (data?.roads||[]).forEach(r=>drawRoad(ctx,r,false));
+  (data?.roads||[]).forEach(r=>drawRoadLabel(ctx,r));
   (data?.sites||[]).forEach((s,i)=>drawSite(ctx,s,i,color));
+  if(bldgs) (data?.trees||[]).forEach(t=>drawTree2D(ctx,t));
   if(bldgs) (data?.bldgs||[]).forEach(b=>drawBldg(ctx,b,color));
 }
 function mkCanvas(w=W,h=H){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
@@ -305,7 +387,7 @@ function render3D(cv, layers, view){
   const th=view.angle*Math.PI/180, co=Math.cos(th), si=Math.sin(th), C30=Math.cos(Math.PI/6), ZS=PX_PER_M*FLOOR_M;
   const rot=(X,Y)=>{ const x=X-W/2, y=Y-H/2; return [x*co-y*si, x*si+y*co]; };
   const p0=(X,Y,Z)=>{ const [a,b]=rot(X,Y); return [(a-b)*C30, (a+b)*0.5 - Z]; };
-  let maxZ=0; layers.forEach(l=>(l.bldgs||[]).forEach(b=>maxZ=Math.max(maxZ,(b.floors||0)*ZS)));
+  let maxZ=0; layers.forEach(l=>(l.bldgs||[]).forEach(b=>maxZ=Math.max(maxZ,bHeight(b)*PX_PER_M)));
   const pts=[]; [[0,0],[W,0],[W,H],[0,H]].forEach(([x,y])=>{ pts.push(p0(x,y,0)); pts.push(p0(x,y,maxZ)); });
   const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
   const minx=Math.min(...xs), maxx=Math.max(...xs), miny=Math.min(...ys), maxy=Math.max(...ys);
@@ -319,31 +401,79 @@ function render3D(cv, layers, view){
   ctx.drawImage(BG_CANVAS,0,0);
   layers.forEach(l=>{ if(l.ground){ ctx.globalAlpha=l.alpha??1; ctx.drawImage(l.ground,0,0); } });
   ctx.restore();
-  // 건물 (먼 것부터)
-  const boxes=[];
-  layers.forEach(l=>(l.bldgs||[]).forEach(b=>{ const r=rectOf(b); const [a,c]=rot(r.x+r.w/2, r.y+r.h/2); boxes.push({b,r,color:l.color,alpha:l.alpha??1,depth:a+c}); }));
-  boxes.sort((u,v)=>u.depth-v.depth);
-  const faces=[[0,1,0,-1],[1,2,1,0],[2,3,0,1],[3,0,-1,0]];
-  boxes.forEach(({b,r,color,alpha})=>{
-    const h=(b.floors||1)*ZS, cs=[[r.x,r.y],[r.x+r.w,r.y],[r.x+r.w,r.y+r.h],[r.x,r.y+r.h]];
-    ctx.save(); ctx.globalAlpha=alpha; ctx.lineJoin='round';
-    faces.forEach(([i,j,nx,ny])=>{
-      const nxr=nx*co-ny*si, nyr=nx*si+ny*co; if(nxr+nyr<=0) return;
-      const A=cs[i], B=cs[j]; const q=[P(A[0],A[1],0),P(B[0],B[1],0),P(B[0],B[1],h),P(A[0],A[1],h)];
-      ctx.beginPath(); q.forEach((p,n)=>n?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
-      ctx.fillStyle=shade(color, nxr-nyr>0? -.05 : -.3); ctx.fill();
-      ctx.strokeStyle=shade(color,-.5); ctx.lineWidth=1; ctx.stroke();
-      ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=1;
-      for(let f=1; f<(b.floors||1); f++){ const z=f*ZS; const s1=P(A[0],A[1],z), s2=P(B[0],B[1],z); ctx.beginPath(); ctx.moveTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.stroke(); }
-    });
-    const top=cs.map(([x,y])=>P(x,y,h));
-    ctx.beginPath(); top.forEach((p,n)=>n?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
-    ctx.fillStyle=shade(color,.25); ctx.fill(); ctx.strokeStyle=shade(color,-.5); ctx.stroke();
-    const tc=P(r.x+r.w/2, r.y+r.h/2, h);
-    if(k*Math.min(r.w,r.h)>22){ ctx.fillStyle='#1d2533'; ctx.font=`700 ${Math.max(11,Math.min(16,k*r.w/4))}px 'Noto Sans KR', sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(`${b.floors}층`, tc[0], tc[1]); }
+  // 건물 · 나무 (먼 것부터)
+  const ZPX=PX_PER_M, FH=FLOOR_M*ZPX;
+  const dep=(x,y)=>{ const [a,b]=rot(x,y); return a+b; };
+  const objs=[];
+  layers.forEach(l=>{
+    (l.bldgs||[]).forEach(b=>{ const r=rectOf(b); objs.push({t:'b', b, r, color:b.color||l.color, alpha:l.alpha??1, names:l.names, depth:dep(r.x+r.w/2,r.y+r.h/2)}); });
+    const trees=[...(l.trees||[]).map(t=>({x:t.p[0],y:t.p[1],s:t.s||40,kind:t.kind})), ...(l.greens||[]).flatMap(g=>autoTrees(g))];
+    trees.forEach(t=>objs.push({t:'t', ...t, alpha:l.alpha??1, depth:dep(t.x,t.y)}));
+  });
+  objs.sort((u,v)=>u.depth-v.depth);
+  const R3=v=>{ const [a,b]=rot(v[0],v[1]); return [a,b,v[2]]; };
+  const L=[0.55,0.15,0.82];
+  const ring=(r,sc,z,seg)=>{ const cx=r.x+r.w/2, cy=r.y+r.h/2, out=[];
+    if(seg){ for(let i=0;i<seg;i++){ const a=i/seg*Math.PI*2; out.push([cx+Math.cos(a)*r.w/2*sc, cy+Math.sin(a)*r.h/2*sc, z]); } }
+    else { const hw=r.w/2*sc, hh=r.h/2*sc; out.push([cx-hw,cy-hh,z],[cx+hw,cy-hh,z],[cx+hw,cy+hh,z],[cx-hw,cy+hh,z]); }
+    return out; };
+  const prism=(r,sc,z0,z1,seg,nf)=>{ const lo=ring(r,sc,z0,seg), hi=ring(r,sc,z1,seg), f=[];
+    for(let i=0;i<lo.length;i++){ const j=(i+1)%lo.length; f.push({v:[lo[i],lo[j],hi[j],hi[i]], fl:nf>1?{A:lo[i],B:lo[j],z0,n:nf}:null, soft:!!seg}); }
+    f.push({v:hi, top:true}); return f; };
+  const pyramid=(r,sc,z0,z1)=>{ const lo=ring(r,sc,z0), ap=[r.x+r.w/2, r.y+r.h/2, z1], f=[]; for(let i=0;i<4;i++) f.push({v:[lo[i],lo[(i+1)%4],ap]}); return f; };
+  const domeF=(r,z0,hg)=>{ const f=[], seg=16, rings=4;
+    for(let q=0;q<rings;q++){ const a0=q/rings*Math.PI/2, a1=(q+1)/rings*Math.PI/2;
+      const lo=ring(r,Math.cos(a0),z0+Math.sin(a0)*hg,seg), hi=ring(r,Math.cos(a1),z0+Math.sin(a1)*hg,seg);
+      for(let i=0;i<seg;i++){ const j=(i+1)%seg; f.push(q===rings-1?{v:[lo[i],lo[j],[r.x+r.w/2,r.y+r.h/2,z0+hg]],soft:true}:{v:[lo[i],lo[j],hi[j],hi[i]],soft:true}); } }
+    return f; };
+  const pieces=(b,r)=>{ const n=b.floors||1, Ht=n*FH, cx=r.x+r.w/2, cy=r.y+r.h/2;
+    switch(b.shape){
+      case 'cyl': return [{f:prism(r,1,0,Ht,20,n), c:[cx,cy,Ht/2]}];
+      case 'tier': { if(n<3) return [{f:prism(r,1,0,Ht,0,n), c:[cx,cy,Ht/2]}];
+        const n1=Math.ceil(n*.5), n2=Math.max(1,Math.ceil((n-n1)*.6)), n3=n-n1-n2, z1=n1*FH, z2=(n1+n2)*FH;
+        const ps=[{f:prism(r,1,0,z1,0,n1),c:[cx,cy,z1/2]},{f:prism(r,.72,z1,z2,0,n2),c:[cx,cy,(z1+z2)/2]}];
+        if(n3>0) ps.push({f:prism(r,.48,z2,Ht,0,n3),c:[cx,cy,(z2+Ht)/2]}); return ps; }
+      case 'pyr': return [{f:pyramid(r,1,0,Ht), c:[cx,cy,Ht/4]}];
+      case 'dome': { const dh=Math.min(r.w,r.h)/2; return [{f:prism(r,1,0,Ht,20,n),c:[cx,cy,Ht/2]},{f:domeF(r,Ht,dh),c:[cx,cy,Ht+dh/3]}]; }
+      case 'spire': { const sh=Ht*.4; return [{f:prism(r,1,0,Ht,0,n),c:[cx,cy,Ht/2]},{f:pyramid(r,.9,Ht,Ht+sh),c:[cx,cy,Ht+sh/4]}]; }
+      default: return [{f:prism(r,1,0,Ht,0,n), c:[cx,cy,Ht/2]}];
+    } };
+  const drawFace=(fc, c, col, tall)=>{
+    const v=fc.v.map(R3), cc=R3(c);
+    const u=[v[1][0]-v[0][0],v[1][1]-v[0][1],v[1][2]-v[0][2]], w=[v[2][0]-v[0][0],v[2][1]-v[0][1],v[2][2]-v[0][2]];
+    let nn=[u[1]*w[2]-u[2]*w[1], u[2]*w[0]-u[0]*w[2], u[0]*w[1]-u[1]*w[0]]; const len=Math.hypot(...nn)||1; nn=nn.map(x=>x/len);
+    const ce=v.reduce((a,p)=>[a[0]+p[0]/v.length,a[1]+p[1]/v.length,a[2]+p[2]/v.length],[0,0,0]);
+    if((ce[0]-cc[0])*nn[0]+(ce[1]-cc[1])*nn[1]+(ce[2]-cc[2])*nn[2] < 0) nn=nn.map(x=>-x);
+    if(nn[0]+nn[1]+nn[2] <= 1e-6) return;
+    const lum=-0.42+0.62*Math.max(0, nn[0]*L[0]+nn[1]*L[1]+nn[2]*L[2]);
+    ctx.beginPath(); fc.v.forEach((p,i)=>{ const q=P(p[0],p[1],p[2]); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath();
+    const fill=shade(col, Math.max(-.6,Math.min(.35,lum))); ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle=fc.soft? fill : shade(col,-.5); ctx.lineWidth=fc.soft?1:0.9; ctx.stroke();
+    if(fc.fl && tall){ for(let q=30; q*FH < fc.fl.z0+fc.fl.n*FH; q+=30){ const z=q*FH; if(z<fc.fl.z0) continue;
+        const A=fc.fl.A, B=fc.fl.B, pts=[P(A[0],A[1],z),P(B[0],B[1],z),P(B[0],B[1],z+FH),P(A[0],A[1],z+FH)];
+        ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath(); ctx.fillStyle='#f2c94c'; ctx.fill(); } }
+    if(fc.fl){ ctx.strokeStyle='rgba(255,255,255,.42)'; ctx.lineWidth=1;
+      for(let i=1;i<fc.fl.n;i++){ const z=fc.fl.z0+i*FH; const s1=P(fc.fl.A[0],fc.fl.A[1],z), s2=P(fc.fl.B[0],fc.fl.B[1],z); ctx.beginPath(); ctx.moveTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.stroke(); } }
+  };
+  const drawTree=t=>{ const s0=t.s, base=P(t.x,t.y,0), top=P(t.x,t.y,s0*.45);
+    ctx.strokeStyle='#7a5230'; ctx.lineWidth=Math.max(1,k*s0*.1); ctx.beginPath(); ctx.moveTo(base[0],base[1]); ctx.lineTo(top[0],top[1]); ctx.stroke();
+    if(t.kind==='pine'){ const a2=P(t.x,t.y,s0*1.15), b2=P(t.x,t.y,s0*.3), w2=k*s0*.32; ctx.fillStyle='#2f7a3b'; ctx.beginPath(); ctx.moveTo(a2[0],a2[1]); ctx.lineTo(b2[0]-w2,b2[1]); ctx.lineTo(b2[0]+w2,b2[1]); ctx.closePath(); ctx.fill(); }
+    else { const c2=P(t.x,t.y,s0*.75), rr=k*s0*.34; ctx.fillStyle='#4aa356'; ctx.beginPath(); ctx.arc(c2[0],c2[1],rr,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(c2[0]-rr*.3,c2[1]-rr*.3,rr*.45,0,Math.PI*2); ctx.fill(); } };
+  let nB=0;
+  objs.forEach(o=>{
+    ctx.save(); ctx.globalAlpha=o.alpha; ctx.lineJoin='round';
+    if(o.t==='t'){ drawTree(o); ctx.restore(); return; }
+    nB++; const {b,r,color}=o;
+    const tall=isSuperTall(b);
+    pieces(b,r).forEach(pc=>pc.f.forEach(fc=>drawFace(fc,pc.c,color,tall)));
+    const topZ=bHeight(b)*ZPX, tc=P(r.x+r.w/2, r.y+r.h/2, topZ);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if((o.names && b.name) || tall){ const lb=`${b.name||''}${tall?(b.name?' · ':'')+'초고층':''}`; ctx.font="700 15px 'Noto Sans KR', sans-serif"; const tw=ctx.measureText(lb).width+12;
+      ctx.fillStyle=tall?'rgba(242,201,76,.95)':'rgba(255,255,255,.92)'; ctx.fillRect(tc[0]-tw/2, tc[1]-36, tw, 22); ctx.fillStyle='#1d2533'; ctx.fillText(lb, tc[0], tc[1]-25); }
+    else if((!b.shape||b.shape==='box'||b.shape==='cyl') && k*Math.min(r.w,r.h)>22){ ctx.fillStyle='#1d2533'; ctx.font=`700 ${Math.max(11,Math.min(16,k*r.w/4))}px 'Noto Sans KR', sans-serif`; ctx.fillText(`${b.floors}층`, tc[0], tc[1]); }
     ctx.restore();
   });
-  if(!boxes.length){ ctx.fillStyle='#5b6577'; ctx.font="600 20px 'Noto Sans KR', sans-serif"; ctx.textAlign='center'; ctx.fillText('아직 지은 건물이 없어요. 평면에서 대지 → 건물 순서로 그려 보세요.', cw/2, 40); }
+  if(!objs.length){ ctx.fillStyle='#5b6577'; ctx.font="600 20px 'Noto Sans KR', sans-serif"; ctx.textAlign='center'; ctx.fillText('아직 지은 건물이 없어요. 평면에서 대지 → 건물 순서로 그려 보세요.', cw/2, 40); }
 }
 function make3DView(stage, getLayers){
   stage.classList.add('v3d');
@@ -432,12 +562,12 @@ async function teamPage(app, cls, tid){
   const [rec, all] = await Promise.all([apiGet(cls,tid), apiGet(cls)]);
   const draftKey = `draft:${cls}/${tid}`;
   const d0 = rec?.data||{};
-  const st = { strokes:d0.strokes||[], sites:d0.sites||[], bldgs:d0.bldgs||[], fields:d0.fields||{}, version:rec?.version||0, savedAt:rec?.savedAt||null,
-               hist:[], fut:[], dirty:false, tool:'site', color:T.color, width:6, showOthers:true, mode:'plan' };
+  const st = { strokes:d0.strokes||[], roads:d0.roads||[], greens:d0.greens||[], trees:d0.trees||[], sites:d0.sites||[], bldgs:d0.bldgs||[], fields:d0.fields||{}, version:rec?.version||0, savedAt:rec?.savedAt||null,
+               hist:[], fut:[], dirty:false, tool:tid==='traffic'?'road':tid==='green'?'green':'site', roadM:15, gKind:'park', tKind:'round', color:T.color, width:6, showOthers:true, mode:'plan' };
   const draft = ls.get(draftKey);
   let restored=false;
   if(draft && draft.baseVersion===st.version && (!st.savedAt || draft.ts > Date.parse(st.savedAt))){
-    Object.assign(st,{strokes:draft.strokes||[], sites:draft.sites||[], bldgs:draft.bldgs||[], fields:draft.fields||{}}); st.dirty=true; restored=true;
+    Object.assign(st,{strokes:draft.strokes||[], roads:draft.roads||[], greens:draft.greens||[], trees:draft.trees||[], sites:draft.sites||[], bldgs:draft.bldgs||[], fields:draft.fields||{}}); st.dirty=true; restored=true;
   } else if(draft) ls.del(draftKey);
   const others = TEAMS.filter(t=>t.id!==tid).map(t=>({t, data: all?.teams?.[t.id]?.data||{}}));
   const city = all?.meta?.data?.city;
@@ -446,13 +576,21 @@ async function teamPage(app, cls, tid){
       <h3>높이 확인 (고도지구)</h3>
       <div class="calc">
         <div><label>고도지구 높이 제한 (m)</label><input data-f="hLimit" inputmode="decimal" placeholder="없으면 비움"></div>
-        <div class="out" id="oHeightBox"><small>가장 높은 건물 (층수 × 3m)</small><span id="oHeight">―</span></div>
-      </div>` : tid==='traffic' ? `
-      <h3>도로 등급</h3>
-      <table class="tbl"><tr><th>구분</th><th>폭(참고)</th><th>도로 이름</th><th>정한 폭(m)</th></tr>
-        ${[['so','소로','12m 미만'],['jung','중로','12~25m'],['dae','대로','25~40m']].map(([k,n,w])=>`<tr><td>${n}</td><td>${w}</td><td><input data-f="r_${k}_name"></td><td><input data-f="r_${k}_w" inputmode="decimal"></td></tr>`).join('')}
-      </table>
-      <p class="hint">집이 4m 미만 좁은 길에 붙어 있으면 길 중심에서 2m 물러서 지어야 해요(건축선 후퇴). 판 위 직선 도구로 도로를 그릴 때 굵기를 폭에 맞춰 보세요 (굵기 12 ≈ 2.4m).</p>` : '';
+        <div class="out" id="oHeightBox"><small>가장 높은 건물 (모양 포함 높이)</small><span id="oHeight">―</span></div>
+      </div>
+      <h3>특별건축구역 (건축법 제69조)</h3>
+      <label>특별건축구역으로 지정 신청할까요?</label><select data-f="special"><option value="">아니오</option><option value="yes">예 — 심의 신청</option></select>
+      <label>이 랜드마크가 특별한 이유 (심의 자료, 10자 이상)</label><textarea data-f="specialWhy" placeholder="예) 강을 닮은 곡선 지붕으로 관광객을 모으는 문화시설이라서"></textarea>
+      <div class="hint" id="spHint">지정되면 높이 제한(고도지구)과 도로에서 띄우기가 완화돼요. 건폐율·용적률은 그대로 지켜요.</div>
+      <p class="hint">초고층(50층 이상 또는 200m 이상)이 되면 「초고층 재난관리 특별법」에 따라 피난안전구역(최대 30개 층마다)·종합방재실이 필요해요.</p>
+      <p class="hint">랜드마크는 모양(상자·원기둥·계단탑·피라미드·돔·첨탑)과 색을 자유롭게 골라요. 대신 건폐율·용적률·고도 제한은 꼭 지켜요. 돔과 첨탑은 지붕만큼 더 높아져요.</p>` : tid==='green' ? `
+      <h3>녹지 계산 (자동)</h3>
+      <div class="calc"><div class="out" style="grid-column:1/3" id="gNowBox"><small>녹지 비율 = 녹지 구역 면적 ÷ 도시 전체 ${fmtN(BOARD_AREA)}㎡</small><span id="gNow">―</span><div class="bar"><i></i></div></div></div>
+      <div id="gTbl"></div>
+      <p class="hint">녹지 구역은 건물을 짓는 대지가 아니에요. 공원 화장실·매점처럼 건물이 필요하면 대지 → 건물로 지어요(자연녹지 건폐율 20% 이하).</p>` : tid==='traffic' ? `
+      <h3>도로 목록 (자동)</h3>
+      <div id="roadTbl" class="muted">도로 도구로 그리면 여기에 나타나요.</div>
+      <p class="hint">도로 폭: 소로 12m 미만 · 중로 12~25m · 대로 25~40m. 대지는 도로에 2m 이상 닿아야 건물을 지을 수 있어요(건축법 접도 의무). 집이 4m 미만 좁은 길에 붙어 있으면 길 중심에서 2m 물러서 지어요(건축선 후퇴).</p>` : '';
 
   app.innerHTML = `${banner()}
     <h2><span class="dot" style="--c:${T.color}"></span>${clsName(cls)}${city?` ${esc(city)}`:''} · ${T.name} <span class="muted" style="font-weight:400">— ${esc(T.zone)}</span></h2>
@@ -461,9 +599,11 @@ async function teamPage(app, cls, tid){
         <div class="tabs"><button data-mode="plan" class="on">✏️ 평면 그리기</button><button data-mode="3d">🧊 입체 보기</button></div>
         <div id="planTools">
           <div class="toolbar">
+            ${tid==='traffic'?`<button class="btn tool key" data-tool="road">🛣️ 도로</button>${ROADS.map(r=>`<button class="btn tool key" data-rm="${r.m}">${r.label} ${r.m}m</button>`).join('')}<span class="sep"></span>`:''}
+            ${tid==='green'?`<button class="btn tool key" data-tool="green">🌳 녹지 구역</button>${Object.entries(GKINDS).map(([k,v])=>`<button class="btn tool key" data-gk="${k}"><span class="dot" style="--c:${v.fill};box-shadow:0 0 0 1px ${v.edge}"></span>${v.label}</button>`).join('')}<button class="btn tool key" data-tool="tree">🌲 나무</button><button class="btn tool key" data-tk="round">● 둥근</button><button class="btn tool key" data-tk="pine">▲ 뾰족</button><span class="sep"></span>`:''}
             <button class="btn tool key" data-tool="site">⬚ 대지</button>
             <button class="btn tool key" data-tool="bldg">🏢 건물</button>
-            <button class="btn tool key" data-tool="select">👆 건물 고치기</button>
+            <button class="btn tool key" data-tool="select">👆 ${tid==='traffic'||tid==='green'?'고치기':'건물 고치기'}</button>
             <span class="sep"></span>
             ${[['pen','✏️ 펜'],['line','📏 직선'],['rect','▭ 네모'],['fill','▦ 칠한 네모'],['text','🔤 글자'],['eraser','🧽 지우개']].map(([k,l])=>`<button class="btn tool" data-tool="${k}">${l}</button>`).join('')}
           </div>
@@ -483,7 +623,7 @@ async function teamPage(app, cls, tid){
         </div>
         <div class="stage" id="stage"></div>
         <div class="stage" id="stage3d" style="display:none"></div>
-        <p class="muted" id="howto">① <b>대지</b>로 우리 조 땅을 그려요(점선). ② 오른쪽에 <b>건폐율·용적률 상한</b>을 넣어요. ③ <b>건물</b>로 대지 안에 건물 바닥을 그리고 층수를 정해요. 상한을 넘으면 지어지지 않아요. 층수를 바꾸거나 지우려면 <b>건물 고치기</b>로 눌러요.</p>
+        <p class="muted" id="howto">${tid==='green'?'① <b>녹지 구역</b>에서 공원·숲·하천·농지를 고른 뒤 판 위를 끌어 그려요. ② <b>나무</b>를 고르고 누르거나 끌면 나무가 심어져요. ③ 녹지 비율 목표를 오른쪽에 적고 지금 비율과 비교해요. ':''}${tid==='traffic'?'① <b>도로</b>를 고르고 소로·중로·대로 폭을 정한 뒤 판 위를 끌어 도로를 그려요(가로·세로로 맞춰져요). ② 다른 조 건물과 겹치면 그려지지 않아요. ③ 역·주차빌딩 같은 건물이 필요하면 대지 → 건물 순서로 지어요(상한 입력 필요). ':''}① <b>대지</b>로 우리 조 땅을 그려요(점선). ② 오른쪽에 <b>건폐율·용적률 상한</b>을 넣어요. ③ <b>건물</b>로 대지 안에 건물 바닥을 그리고 층수를 정해요. 상한을 넘으면 지어지지 않아요. 층수를 바꾸거나 지우려면 <b>건물 고치기</b>로 눌러요.</p>
       </div>
       <div class="card form">
         <h3 style="margin-top:0">우리 조 정보</h3>
@@ -494,6 +634,8 @@ async function teamPage(app, cls, tid){
           <div style="grid-column:1/3"><label>② 용도지구 (없으면 ―)</label><input data-f="district" placeholder="예) 고도지구, 경관지구"></div>
           <div><label>③ 건폐율 상한 (%)</label><input data-f="bcr" inputmode="decimal" placeholder="조례 숫자"></div>
           <div><label>④ 용적률 상한 (%)</label><input data-f="far" inputmode="decimal" placeholder="조례 숫자"></div>
+          <div style="grid-column:1/3"><label>도로에서 띄울 거리 (m) — 건축조례 '대지 안의 공지'</label><input data-f="setback" inputmode="decimal" placeholder="조례 숫자 (없으면 0)"></div>
+          <div class="hint" style="grid-column:1/3">참고: 아파트 2~6m · 연립 2~5m · 다세대 1~4m · 판매·숙박·문화시설(1,000㎡ 이상) 3~6m · 단독주택은 보통 0. 정확한 숫자는 우리 도시 건축조례에서 찾아요.</div>
           <div class="hint" id="capHint" style="grid-column:1/3"></div>
         </div>
         <h3>자동 계산</h3>
@@ -515,21 +657,32 @@ async function teamPage(app, cls, tid){
 
   /* --- 평면 판 --- */
   const stage=$('#stage');
-  const cBg=mkCanvas(), cOthers=mkCanvas(), cMine=mkCanvas(), cTmp=mkCanvas();
-  [cBg,cOthers,cMine,cTmp].forEach(c=>stage.appendChild(c));
+  const cBg=mkCanvas(), cOthers=mkCanvas(), cGuide=mkCanvas(), cMine=mkCanvas(), cTmp=mkCanvas();
+  [cBg,cOthers,cGuide,cMine,cTmp].forEach(c=>stage.appendChild(c));
+  const xG=cGuide.getContext('2d');
   cOthers.style.opacity=.28;
   drawBg(cBg.getContext('2d'));
   const xO=cOthers.getContext('2d'), xM=cMine.getContext('2d'), xT=cTmp.getContext('2d');
-  const myData=()=>({strokes:st.strokes, sites:st.sites, bldgs:st.bldgs});
+  const myData=()=>({strokes:st.strokes, roads:st.roads, greens:st.greens, trees:st.trees, sites:st.sites, bldgs:st.bldgs});
+  const allRoads=()=>[...st.roads, ...others.flatMap(o=>o.data.roads||[])];
+  const otherBldgs=()=>others.flatMap(o=>(o.data.bldgs||[]).map(b=>({b,t:o.t})));
   function renderOthers(){ xO.clearRect(0,0,W,H); if(st.showOthers) others.forEach(o=>{ const c=mkCanvas(); drawLayer(c.getContext('2d'),o.data,o.t.color); xO.drawImage(c,0,0); }); }
   const renderMine=()=>drawLayer(xM, myData(), T.color);
+  function renderGuide(){ // 도로에서 띄워야 하는 빨간 띠
+    xG.clearRect(0,0,W,H); const sb=isSpecial(st.fields)?0:num(st.fields.setback);
+    if(!sb || !['bldg','select'].includes(st.tool)) return;
+    xG.save(); xG.lineCap='square'; xG.strokeStyle='rgba(214,69,69,.22)';
+    allRoads().forEach(r=>{ xG.lineWidth=(r.m+2*sb)*PX_PER_M; xG.beginPath(); xG.moveTo(r.a[0],r.a[1]); xG.lineTo(r.b[0],r.b[1]); xG.stroke(); });
+    xG.globalCompositeOperation='destination-out'; xG.strokeStyle='#000';
+    allRoads().forEach(r=>{ xG.lineWidth=r.m*PX_PER_M; xG.beginPath(); xG.moveTo(r.a[0],r.a[1]); xG.lineTo(r.b[0],r.b[1]); xG.stroke(); });
+    xG.restore(); }
   renderOthers(); renderMine();
 
   /* --- 입체 --- */
   let v3=null;
   const layers3d=()=>[
-    ...(st.showOthers? others.map(o=>({color:o.t.color, ground:groundOf(o.data,o.t.color), bldgs:o.data.bldgs||[], alpha:.55})) : []),
-    {color:T.color, ground:groundOf(myData(),T.color), bldgs:st.bldgs, alpha:1}
+    ...(st.showOthers? others.map(o=>({color:o.t.color, ground:groundOf(o.data,o.t.color), bldgs:o.data.bldgs||[], greens:o.data.greens||[], trees:o.data.trees||[], alpha:.55, names:o.t.id==='landmark'})) : []),
+    {color:T.color, ground:groundOf(myData(),T.color), bldgs:st.bldgs, greens:st.greens, trees:st.trees, alpha:1, names:tid==='landmark'}
   ];
   app.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
     st.mode=b.dataset.mode; app.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x===b));
@@ -540,9 +693,9 @@ async function teamPage(app, cls, tid){
 
   /* --- 계획표 --- */
   const inputs=[...app.querySelectorAll('[data-f]')];
-  inputs.forEach(i=>{ i.value = st.fields[i.dataset.f] ?? ''; i.addEventListener('input', ()=>{ st.fields[i.dataset.f]=i.value; markDirty(); updateCalc(); }); });
+  inputs.forEach(i=>{ i.value = st.fields[i.dataset.f] ?? ''; const on=()=>{ st.fields[i.dataset.f]=i.value; markDirty(); updateCalc(); }; i.addEventListener('input', on); if(i.tagName==='SELECT') i.addEventListener('change', on); });
   function updateCalc(){
-    const f=st.fields, ev=evalTeam(f, myData());
+    const f=st.fields, ev=evalTeam(f, myData(), allRoads());
     const cap=nationalCap(f), hint=$('#capHint');
     if(cap){
       const over=[]; if(num(f.bcr)>cap[0]) over.push('건폐율'); if(num(f.far)>cap[1]) over.push('용적률');
@@ -557,10 +710,24 @@ async function teamPage(app, cls, tid){
       el.classList.toggle('bad',bad); $('span',el).textContent = ev.siteArea? `${r1(now)}%${capv!=null?` / ${capv}%`:''}  (${fmtN(area)}㎡)`:'―';
       const i=$('i',el); i.style.width = capv? Math.min(100, now/capv*100)+'%':'0'; i.classList.toggle('bad',bad); };
     setNow('nowB', ev.bcrNow, ev.capB, ev.foot); setNow('nowF', ev.farNow, ev.capF, ev.gfa);
-    $('#siteTbl').innerHTML = ev.per.length? `<table class="tbl" style="margin-top:8px"><tr><th>대지</th><th>면적</th><th>건물</th><th>건폐율</th><th>용적률</th></tr>${ev.per.map(p=>`<tr><td>대지${p.i}</td><td>${fmtN(p.area)}㎡</td><td>${p.n}채</td><td class="${p.overB?'bad':''}">${r1(p.bcr)}%</td><td class="${p.overF?'bad':''}">${r1(p.far)}%</td></tr>`).join('')}</table>`:'';
-    if(tid==='landmark'){ const hl=num(f.hLimit), h=ev.maxFloors*FLOOR_M, out=$('#oHeight');
-      out.textContent = ev.maxFloors? `${ev.maxFloors}층 = ${h} m` + (hl!=null?(h<=hl?'  ✅ 제한 안':'  ❌ 제한 초과'):'') : '―';
-      $('#oHeightBox').classList.toggle('bad', hl!=null && h>hl); }
+    const rds=allRoads();
+    $('#siteTbl').innerHTML = ev.per.length? `<table class="tbl" style="margin-top:8px"><tr><th>대지</th><th>면적</th><th>건물</th><th>건폐율</th><th>용적률</th><th>도로</th></tr>${ev.per.map((p,i)=>{ const t=rds.some(rd=>touchRoad(st.sites[i],rd));
+      return `<tr><td>대지${p.i}</td><td>${fmtN(p.area)}㎡</td><td>${p.n}채</td><td class="${p.overB?'bad':''}">${r1(p.bcr)}%</td><td class="${p.overF?'bad':''}">${r1(p.far)}%</td><td class="${t?'':'bad'}">${t?'✅ 닿음':'❌ 안 닿음'}</td></tr>`;}).join('')}</table>${rds.length?'':'<p class="hint">아직 교통조가 그린 도로가 없어요. 교통조가 저장한 뒤 새로고침하면 확인돼요.</p>'}`:'';
+    const rt=$('#roadTbl'); if(rt) rt.innerHTML = st.roads.length? `<table class="tbl"><tr><th>#</th><th>이름</th><th>등급</th><th>폭</th><th>길이</th></tr>${st.roads.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)||'―'}</td><td>${roadGrade(r.m)}</td><td>${r.m}m</td><td>${fmtN(Math.hypot(r.b[0]-r.a[0],r.b[1]-r.a[1])/PX_PER_M)}m</td></tr>`).join('')}</table>` : '도로 도구로 그리면 여기에 나타나요.';
+    if(tid==='landmark'){ const sp=isSpecial(f), hl=sp?null:num(f.hLimit), h=ev.maxH, out=$('#oHeight');
+      out.textContent = ev.nB? `${h} m` + (sp?'  (특별건축구역: 높이 완화)':hl!=null?(h<=hl?'  ✅ 제한 안':'  ❌ 제한 초과'):'') + (st.bldgs.some(isSuperTall)?'  🏙️ 초고층':'') : '―';
+      $('#oHeightBox').classList.toggle('bad', hl!=null && h>hl);
+      const sh=$('#spHint');
+      if(f.special==='yes' && !sp){ sh.className='hint bad'; sh.textContent='⚠️ 특별한 이유를 10자 이상 써야 심의를 통과해요. 통과 전에는 건물을 지을 수 없어요.'; }
+      else if(sp){ sh.className='hint'; sh.style.color='var(--ok)'; sh.textContent='✅ 특별건축구역 심의 통과 — 높이 제한과 도로 띄우기가 완화돼요. 건폐율·용적률은 그대로 지켜요.'; }
+      else { sh.className='hint'; sh.style.color=''; sh.textContent='지정되면 높이 제한(고도지구)과 도로에서 띄우기가 완화돼요. 건폐율·용적률은 그대로 지켜요.'; } }
+    if(tid==='green'){ const ga=st.greens.reduce((a,g)=>a+areaM2(g),0), now=ga/BOARD_AREA*100, goal=num(f.gRatio), el=$('#gNowBox');
+      $('#gNow').textContent = ga? `${r1(now)}% (${fmtN(ga)}㎡)${goal!=null?` / 목표 ${goal}%`:''}` : '녹지 구역을 그려 주세요';
+      const bi=$('i',el); bi.style.width=(goal? Math.min(100, now/goal*100) : Math.min(100,now))+'%'; bi.classList.toggle('bad', goal!=null && now<goal);
+      el.classList.toggle('bad', goal!=null && ga>0 && now<goal);
+      const by={}; st.greens.forEach(g=>by[g.kind]=(by[g.kind]||0)+areaM2(g));
+      $('#gTbl').innerHTML = ga? `<table class="tbl" style="margin-top:8px"><tr><th>종류</th><th>면적</th><th>도시 대비</th></tr>${Object.entries(by).map(([k,v])=>`<tr><td>${GKINDS[k]?.label||k}</td><td>${fmtN(v)}㎡</td><td>${r1(v/BOARD_AREA*100)}%</td></tr>`).join('')}<tr><td>심은 나무</td><td colspan="2">${st.trees.length}그루</td></tr></table>`:''; }
+    renderGuide();
   }
   updateCalc();
 
@@ -569,25 +736,32 @@ async function teamPage(app, cls, tid){
     app.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on', b.dataset.tool===st.tool));
     app.querySelectorAll('[data-w]').forEach(b=>b.classList.toggle('on', +b.dataset.w===st.width));
     app.querySelectorAll('[data-c]').forEach(b=>b.classList.toggle('on', b.dataset.c===st.color));
+    app.querySelectorAll('[data-rm]').forEach(b=>b.classList.toggle('on', st.tool==='road' && +b.dataset.rm===st.roadM));
+    app.querySelectorAll('[data-gk]').forEach(b=>b.classList.toggle('on', st.tool==='green' && b.dataset.gk===st.gKind));
+    app.querySelectorAll('[data-tk]').forEach(b=>b.classList.toggle('on', st.tool==='tree' && b.dataset.tk===st.tKind));
+    renderGuide();
   }
+  app.querySelectorAll('[data-gk]').forEach(b=>b.onclick=()=>{st.gKind=b.dataset.gk; st.tool='green'; syncTools();});
+  app.querySelectorAll('[data-tk]').forEach(b=>b.onclick=()=>{st.tKind=b.dataset.tk; st.tool='tree'; syncTools();});
+  app.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{st.roadM=+b.dataset.rm; st.tool='road'; syncTools();});
   app.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{st.tool=b.dataset.tool; syncTools();});
   app.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{st.width=+b.dataset.w; syncTools();});
-  app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{st.color=b.dataset.c; if(['eraser','site','bldg','select'].includes(st.tool)) st.tool='pen'; syncTools();});
+  app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{st.color=b.dataset.c; if(['eraser','site','bldg','select','road','green','tree'].includes(st.tool)) st.tool='pen'; syncTools();});
   syncTools();
   $('#others').onchange=e=>{ st.showOthers=e.target.checked; renderOthers(); if(v3) v3.draw(); };
 
   /* --- 되돌리기 --- */
-  const snapS=()=>JSON.stringify({s:st.strokes, si:st.sites, b:st.bldgs});
-  const restore=j=>{ const o=JSON.parse(j); st.strokes=o.s; st.sites=o.si; st.bldgs=o.b; };
+  const snapS=()=>JSON.stringify({s:st.strokes, r:st.roads, g:st.greens, t:st.trees, si:st.sites, b:st.bldgs});
+  const restore=j=>{ const o=JSON.parse(j); st.strokes=o.s; st.roads=o.r||[]; st.greens=o.g||[]; st.trees=o.t||[]; st.sites=o.si; st.bldgs=o.b; };
   function commit(fn){ st.hist.push(snapS()); if(st.hist.length>80) st.hist.shift(); st.fut=[]; fn(); changed(); }
   function changed(){ renderMine(); markDirty(); updateCalc(); if(v3&&st.mode==='3d') v3.draw(); }
   function undo(){ if(!st.hist.length) return; st.fut.push(snapS()); restore(st.hist.pop()); changed(); }
   function redo(){ if(!st.fut.length) return; st.hist.push(snapS()); restore(st.fut.pop()); changed(); }
   $('#undo').onclick=undo; $('#redo').onclick=redo;
   $('#clear').onclick=async()=>{
-    if(!st.strokes.length && !st.sites.length && !st.bldgs.length) return;
-    const r=await dialog({title:'전체 지우기', msg:'우리 조 그림 · 대지 · 건물을 모두 지울까요?\n(저장하기 전까지는 되돌리기로 살릴 수 있어요)', buttons:[['취소',false],['모두 지우기',true,'danger']]});
-    if(r.btn) commit(()=>{ st.strokes=[]; st.sites=[]; st.bldgs=[]; });
+    if(!st.strokes.length && !st.roads.length && !st.greens.length && !st.trees.length && !st.sites.length && !st.bldgs.length) return;
+    const r=await dialog({title:'전체 지우기', msg:'우리 조가 만든 것(그림 · 도로 · 녹지 · 나무 · 대지 · 건물)을 모두 지울까요?\n(저장하기 전까지는 되돌리기로 살릴 수 있어요)', buttons:[['취소',false],['모두 지우기',true,'danger']]});
+    if(r.btn) commit(()=>{ st.strokes=[]; st.roads=[]; st.greens=[]; st.trees=[]; st.sites=[]; st.bldgs=[]; });
   };
 
   /* --- 저장 상태 · 임시 저장 --- */
@@ -602,9 +776,9 @@ async function teamPage(app, cls, tid){
   if(restored) toast('저장하지 않은 작업을 이 기기에서 불러왔어요. 꼭 저장하세요!');
 
   async function save(force){
-    const ev=evalTeam(st.fields, myData());
+    const ev=evalTeam(st.fields, myData(), allRoads());
     if(!force && ev.issues.length){
-      const r=await dialog({title:'⚠️ 규칙을 넘은 건물이 있어요', bad:true, msg:ev.issues.join('\n')+'\n\n상한을 바꾸었거나 대지를 줄여서 생긴 문제예요. 건물 층수나 크기를 고쳐 주세요.', buttons:[['고치러 가기',false,'primary'],['그래도 저장',true]]});
+      const r=await dialog({title:'⚠️ 규칙을 넘은 건물이 있어요', bad:true, msg:ev.issues.join('\n')+'\n\n규칙 숫자를 바꾸었거나 도로가 새로 생겨서 생긴 문제예요. 건물 층수·크기·위치를 고쳐 주세요.', buttons:[['고치러 가기',false,'primary'],['그래도 저장',true]]});
       if(!r.btn) return;
     }
     const btn=$('#save'); btn.disabled=true; btn.textContent='저장 중…';
@@ -614,13 +788,13 @@ async function teamPage(app, cls, tid){
       const pick=await dialog({title:'먼저 저장한 내용이 있어요', msg:`다른 기기에서 ${fmtTime(res.current?.savedAt)}에 먼저 저장했어요.\n어떻게 할까요?`,
         buttons:[['취소','cancel'],['저장된 것 불러오기','load'],['내 것으로 덮어쓰기','force','primary']]});
       if(pick.btn==='force') return save(true);
-      if(pick.btn==='load'){ const c=res.current?.data||{}; st.strokes=c.strokes||[]; st.sites=c.sites||[]; st.bldgs=c.bldgs||[]; st.fields=c.fields||{};
-        st.version=res.current?.version||0; st.savedAt=res.current?.savedAt; st.hist=[]; st.fut=[]; ls.del(draftKey);
+      if(pick.btn==='load'){ const c=res.current?.data||{}; st.strokes=c.strokes||[]; st.roads=c.roads||[]; st.greens=c.greens||[]; st.trees=c.trees||[]; st.sites=c.sites||[]; st.bldgs=c.bldgs||[]; st.fields=c.fields||{};
+        clearTimeout(draftTimer); st.version=res.current?.version||0; st.savedAt=res.current?.savedAt; st.hist=[]; st.fut=[]; ls.del(draftKey);
         inputs.forEach(i=>i.value=st.fields[i.dataset.f]??''); renderMine(); updateCalc(); st.dirty=false; setStatus(); }
       return;
     }
     if(res.error){ toast('저장 실패: '+res.error+' — 인터넷 연결을 확인하고 다시 눌러 주세요'); return; }
-    st.version=res.version; st.savedAt=res.savedAt; st.dirty=false; ls.del(draftKey); setStatus(); toast('저장했어요!');
+    clearTimeout(draftTimer); st.version=res.version; st.savedAt=res.savedAt; st.dirty=false; ls.del(draftKey); setStatus(); toast('저장했어요!');
   }
   $('#save').onclick=()=>save(false);
 
@@ -630,46 +804,70 @@ async function teamPage(app, cls, tid){
     if(capB==null||capF==null) return {err:'먼저 오른쪽 칸에 ③ 건폐율 상한과 ④ 용적률 상한을 입력해요.\n(3단계에서 조례로 찾은 숫자예요)'};
     const nc=nationalCap(f);
     if(nc && (capB>nc[0]||capF>nc[1])) return {err:`입력한 상한(건폐율 ${capB}% · 용적률 ${capF}%)이 국가 상한(${nc[0]}% · ${nc[1]}%)보다 커요.\n조례 숫자를 다시 확인해요.`};
+    if(f.special==='yes' && !isSpecial(f)) return {err:'특별건축구역 심의 중이에요.\n오른쪽에 "이 랜드마크가 특별한 이유"를 10자 이상 써야 심의를 통과하고 건물을 지을 수 있어요.\n(신청하지 않으려면 "아니오"로 바꿔요)'};
+    const sbv=isSpecial(f)?'0':String(f.setback??'').trim();
+    if(sbv==='') return {err:'먼저 오른쪽 칸에 "도로에서 띄울 거리 (m)"를 입력해요.\n(건축조례의 대지 안의 공지 숫자, 없으면 0)'};
     const si=st.sites.findIndex(s=>inside(cand,s));
     if(si<0) return {err:'건물은 점선으로 그린 대지 안에 지어야 해요.\n대지 밖으로 나가지 않게 다시 그려요.'};
+    const rd=allRoads().find(r=>onRoad(cand,r));
+    if(rd) return {err:`도로(${rd.name?rd.name+' · ':''}${roadGrade(rd.m)} ${rd.m}m) 위에는 건물을 지을 수 없어요.\n도로 밖 빈 곳에 그려요.`};
+    const sb=num(sbv)||0;
+    if(sb>0){ const near=allRoads().map(r=>({r,g:roadGap(cand,r)})).filter(x=>x.g<sb-0.05).sort((a,b)=>a.g-b.g)[0];
+      if(near) return {err:`도로에서 너무 가까워요!\n${near.r.name||roadGrade(near.r.m)} 경계에서 ${r1(Math.max(0,near.g))}m 떨어져 있어요.\n조례 기준은 ${sb}m 이상이에요. (빨간 띠 밖에 지어요)`, fatal:true}; }
+    const ob=otherBldgs().find(x=>overlaps(x.b,cand));
+    if(ob) return {err:`${ob.t.name}의 건물과 겹쳐요. 빈 곳에 그려요.`};
     const rest=st.bldgs.filter(b=>b.id!==ignoreId);
     if(rest.some(b=>overlaps(b,cand))) return {err:'다른 건물과 겹쳐요. 빈 곳에 그려요.'};
     const site=st.sites[si], sArea=areaM2(site), fa=areaM2(cand);
     const inSite=rest.filter(b=>inside(b,site));
-    const foot=inSite.reduce((a,b)=>a+areaM2(b),0)+fa, gfaOther=inSite.reduce((a,b)=>a+areaM2(b)*b.floors,0);
+    const foot=inSite.reduce((a,b)=>a+bArea(b),0)+fa, gfaOther=inSite.reduce((a,b)=>a+bArea(b)*b.floors,0);
     const bcr=foot/sArea*100;
     if(bcr>capB+1e-9) return {err:`건폐율 초과!\n대지${si+1} 면적 ${fmtN(sArea)}㎡ 중 건물 바닥이 ${fmtN(foot)}㎡가 되어\n건폐율이 ${r1(bcr)}%예요. (상한 ${capB}%)\n\n건물 바닥을 더 작게 그려요. 이 대지에 남은 바닥 면적은 ${fmtN(Math.max(0,sArea*capB/100-(foot-fa)))}㎡예요.`, fatal:true};
     const maxByFar=Math.floor((sArea*capF/100-gfaOther)/fa+1e-9);
-    const hl=tid==='landmark'?num(f.hLimit):null, maxByH=hl!=null?Math.floor(hl/FLOOR_M):Infinity;
+    const hl=tid==='landmark'&&!isSpecial(f)?num(f.hLimit):null, maxByH=hl!=null?Math.floor(hl/FLOOR_M):Infinity;
     return {si, sArea, fa, gfaOther, maxF:Math.min(maxByFar,maxByH), maxByFar, maxByH, capF, hl};
   }
   async function askFloors(cand, info, current){
-    let val=current||1;
+    const lm=tid==='landmark';
+    let val=current||1, shape=cand.shape||'box', color=cand.color||T.color, name=cand.name||'';
     while(true){
-      const r=await dialog({title:'🏢 몇 층으로 지을까요?', msg:`바닥 넓이 ${fmtN(info.fa)}㎡ · 대지${info.si+1}\n이 자리에 지을 수 있는 최대 층수: ${info.maxF>=1?info.maxF+'층':'없음'}`,
-        inputs:[{k:'floors',label:'층수',type:'number',value:val},{k:'name',label:'건물 이름 (선택, 예: 우리 집, 시청)',value:cand.name||''}],
-        buttons:[['취소',null],['짓기','ok','primary']]});
+      const inputs=[{k:'floors',label:'층수',type:'number',value:val},{k:'name',label:'건물 이름 (선택, 예: 우리 집, 시청)',value:name}];
+      if(lm) inputs.push({k:'shape',label:'모양',type:'select',value:shape,options:SHAPES},{k:'color',label:'색',type:'color',value:color});
+      const r=await dialog({title: lm?'🏛️ 랜드마크 짓기':'🏢 몇 층으로 지을까요?',
+        msg:`바닥 ${fmtN(info.fa)}㎡ · 대지${info.si+1}\n이 자리에 지을 수 있는 최대 층수(상자 모양): ${info.maxF>=1?info.maxF+'층':'없음'}${lm?'\n원기둥·돔은 바닥이 둥글어 면적이 작아지고, 돔·첨탑은 지붕만큼 더 높아져요.':''}`,
+        inputs, buttons:[['취소',null],['짓기','ok','primary']]});
       if(r.btn!=='ok') return null;
-      const fl=Math.floor(num(r.values.floors)||0);
-      if(fl<1){ await dialog({title:'층수를 확인해요', bad:true, msg:'1층 이상으로 입력해요.'}); continue; }
-      const gfa=info.gfaOther+info.fa*fl, far=gfa/info.sArea*100;
+      const fl=Math.floor(num(r.values.floors)||0); name=(r.values.name||'').trim().slice(0,12);
+      if(lm){ shape=r.values.shape||'box'; color=r.values.color||T.color; }
+      if(fl<1){ await dialog({title:'층수를 확인해요', bad:true, msg:'1층 이상으로 입력해요.'}); val=1; continue; }
+      const test={...cand, floors:fl, shape: lm?shape:undefined};
+      const fa=bArea(test), gfa=info.gfaOther+fa*fl, far=gfa/info.sArea*100;
+      const maxByFar=Math.floor((info.sArea*info.capF/100-info.gfaOther)/fa+1e-9);
       if(far>info.capF+1e-9){
-        await dialog({title:'⚠️ 용적률 초과! 지을 수 없어요', bad:true, msg:`${fl}층이면 연면적 ${fmtN(gfa)}㎡ → 용적률 ${r1(far)}%예요. (상한 ${info.capF}%)\n\n${info.maxByFar>=1?`이 자리에는 ${info.maxByFar}층까지 지을 수 있어요.`:'이 대지는 용적률이 꽉 찼어요. 다른 건물 층수를 줄이거나 바닥을 작게 그려요.'}`});
-        val=Math.max(1,info.maxByFar); if(info.maxByFar<1) return null; continue;
+        await dialog({title:'⚠️ 용적률 초과! 지을 수 없어요', bad:true, msg:`${fl}층이면 연면적 ${fmtN(gfa)}㎡ → 용적률 ${r1(far)}%예요. (상한 ${info.capF}%)\n\n${maxByFar>=1?`이 자리에는 ${maxByFar}층까지 지을 수 있어요.`:'이 대지는 용적률이 꽉 찼어요. 다른 건물 층수를 줄이거나 바닥을 작게 그려요.'}`});
+        if(maxByFar<1) return null; val=maxByFar; continue;
       }
-      if(info.hl!=null && fl*FLOOR_M>info.hl){
-        await dialog({title:'⚠️ 높이 제한 초과! 지을 수 없어요', bad:true, msg:`${fl}층이면 높이 약 ${fl*FLOOR_M}m예요. 고도지구 제한은 ${info.hl}m라서\n${info.maxByH}층까지만 지을 수 있어요.`});
-        val=Math.max(1,info.maxByH); continue;
+      const hgt=bHeight(test);
+      if(info.hl!=null && hgt>info.hl){
+        let ok=fl; while(ok>0 && bHeight({...test,floors:ok})>info.hl) ok--;
+        await dialog({title:'⚠️ 높이 제한 초과! 지을 수 없어요', bad:true, msg:`${fl}층${lm&&shape!=='box'?' '+SHAPE_NAME[shape]:''}이면 높이 약 ${hgt}m예요. 고도지구 제한은 ${info.hl}m라서\n${ok>=1?`이 모양으로는 ${ok}층까지 지을 수 있어요.`:'이 모양으로는 지을 수 없어요.'}`});
+        val=Math.max(1,ok); continue;
       }
-      return {floors:fl, name:(r.values.name||'').trim().slice(0,12)};
+      const out={floors:fl, name}; if(lm){ out.shape=shape; out.color=color; } return out;
     }
+  }
+  async function superTallNotice(b){
+    const n=b.floors, refuge=Math.floor((n-1)/30);
+    await dialog({title:'🏙️ 초고층 건축물이에요!', msg:`${n}층 · 높이 약 ${bHeight(b)}m → 50층 이상 또는 200m 이상이라 초고층이에요.\n\n「초고층 및 지하연계 복합건축물 재난관리에 관한 특별법」에 따라\n• 짓기 전 사전재난영향성평가를 받아야 해요\n• 피난안전구역을 최대 30개 층마다 만들어요 (이 건물은 ${Math.max(1,refuge)}곳 이상)\n• 총괄재난관리자와 종합방재실을 둬야 해요\n\n입체 보기에서 노란 띠가 피난안전구역이에요.`});
   }
   async function addBldg(cand){
     const info=checkBldg(cand);
     if(info.err){ await dialog({title:'⚠️ 지을 수 없어요', bad:true, msg:info.err}); return; }
     if(info.maxF<1){ await dialog({title:'⚠️ 지을 수 없어요', bad:true, msg:info.maxByFar<1?'이 대지는 용적률이 꽉 찼어요.\n다른 건물 층수를 줄이거나 바닥을 작게 그려요.':'높이 제한 때문에 1층도 지을 수 없어요.'}); return; }
     const r=await askFloors(cand, info, 1); if(!r) return;
-    commit(()=>st.bldgs.push({...cand, id:uid(), floors:r.floors, name:r.name}));
+    const nb={...cand, id:uid(), ...r};
+    commit(()=>st.bldgs.push(nb));
+    if(isSuperTall(nb)) await superTallNotice(nb);
     toast(`${r.floors}층 건물을 지었어요!`);
   }
   async function editAt(p){
@@ -677,15 +875,31 @@ async function teamPage(app, cls, tid){
     if(b){
       const info=checkBldg(b, b.id);
       if(info.err && !info.fatal){ await dialog({title:'⚠️ 확인해요', bad:true, msg:info.err}); }
-      const r=await dialog({title:`🏢 ${b.name||'건물'} · ${b.floors}층`, msg:`바닥 넓이 ${fmtN(areaM2(b))}㎡`, buttons:[['닫기',null],['삭제','del','danger'],['층수·이름 바꾸기','edit','primary']]});
+      const r=await dialog({title:`🏢 ${b.name||'건물'} · ${b.floors}층${b.shape&&b.shape!=='box'?' · '+SHAPE_NAME[b.shape]:''}`, msg:`바닥 넓이 ${fmtN(bArea(b))}㎡ · 높이 약 ${bHeight(b)}m`, buttons:[['닫기',null],['삭제','del','danger'],[tid==='landmark'?'층수·모양·색 바꾸기':'층수·이름 바꾸기','edit','primary']]});
       if(r.btn==='del') commit(()=>{ st.bldgs=st.bldgs.filter(x=>x.id!==b.id); });
       if(r.btn==='edit'){
         if(info.err){ await dialog({title:'⚠️ 바꿀 수 없어요', bad:true, msg:info.err+'\n\n건물을 지우고 다시 지어요.'}); return; }
         const n=await askFloors(b, info, b.floors); if(!n) return;
-        commit(()=>{ const x=st.bldgs.find(x=>x.id===b.id); x.floors=n.floors; x.name=n.name; });
+        commit(()=>{ const x=st.bldgs.find(x=>x.id===b.id); Object.assign(x, n); });
+        const x2=st.bldgs.find(x=>x.id===b.id); if(x2&&isSuperTall(x2)) await superTallNotice(x2);
       }
       return;
     }
+    const rd=[...st.roads].reverse().find(r=>segPtDist(p,r.a,r.b)<=r.m*PX_PER_M/2+4);
+    if(rd){
+      const r=await dialog({title:`🛣️ ${rd.name||'도로'} · ${roadGrade(rd.m)} ${rd.m}m`, msg:`길이 ${fmtN(Math.hypot(rd.b[0]-rd.a[0],rd.b[1]-rd.a[1])/PX_PER_M)}m`, inputs:[{k:'name',label:'도로 이름',value:rd.name||''}], buttons:[['닫기',null],['도로 삭제','del','danger'],['이름 바꾸기','edit','primary']]});
+      if(r.btn==='del') commit(()=>{ st.roads=st.roads.filter(x=>x!==rd); });
+      if(r.btn==='edit') commit(()=>{ rd.name=(r.values.name||'').trim().slice(0,12); });
+      return;
+    }
+    const tr=st.trees.findIndex(t=>Math.hypot(t.p[0]-p[0],t.p[1]-p[1])<=(t.s||40)/4+4);
+    if(tr>=0){ commit(()=>st.trees.splice(tr,1)); toast('나무를 뽑았어요'); return; }
+    const gi=[...st.greens].reverse().find(g=>hit(g,p));
+    if(gi){ const kk=GKINDS[gi.kind]||GKINDS.park;
+      const r=await dialog({title:`🌳 ${gi.name||kk.label} · ${fmtN(areaM2(gi))}㎡`, inputs:[{k:'kind',label:'종류',type:'select',value:gi.kind,options:Object.entries(GKINDS).map(([k,v])=>[k,v.label])},{k:'name',label:'이름 (선택, 예: 중앙공원)',value:gi.name||''}], buttons:[['닫기',null],['삭제','del','danger'],['바꾸기','edit','primary']]});
+      if(r.btn==='del') commit(()=>{ st.greens=st.greens.filter(x=>x!==gi); });
+      if(r.btn==='edit') commit(()=>{ gi.kind=r.values.kind||gi.kind; gi.name=(r.values.name||'').trim().slice(0,12); });
+      return; }
     const si=st.sites.findIndex(s=>hit(s,p));
     if(si>=0){
       const s=st.sites[si], cnt=st.bldgs.filter(b=>inside(b,s)).length;
@@ -693,7 +907,7 @@ async function teamPage(app, cls, tid){
       if(r.btn==='del') commit(()=>{ st.bldgs=st.bldgs.filter(b=>!inside(b,s)); st.sites=st.sites.filter(x=>x.id!==s.id); });
       return;
     }
-    toast('건물이나 대지를 눌러요');
+    toast(tid==='traffic'?'도로나 건물, 대지를 눌러요':tid==='green'?'녹지 구역이나 나무를 눌러요':'건물이나 대지를 눌러요');
   }
 
   /* --- 마우스 · 터치 --- */
@@ -709,25 +923,53 @@ async function teamPage(app, cls, tid){
       commit(()=>st.strokes.push({t:'text', a:p, text:text.slice(0,40), c:st.color, size:Math.max(20, st.width*4)})); return;
     }
     stage.setPointerCapture(e.pointerId);
-    if(st.tool==='site'||st.tool==='bldg'){ const q=[snap(p[0]),snap(p[1])]; cur={t:st.tool, a:q, b:q}; }
+    if(st.tool==='tree'){ st.hist.push(snapS()); st.fut=[]; cur={t:'tree', last:null, n:0}; plantAt(p); return; }
+    if(st.tool==='road'){ const q=[snap(p[0]),snap(p[1])]; cur={t:'road', a:q, b:q, m:st.roadM}; }
+    else if(st.tool==='site'||st.tool==='bldg'||st.tool==='green'){ const q=[snap(p[0]),snap(p[1])]; cur={t:st.tool, a:q, b:q}; }
     else if(st.tool==='pen'||st.tool==='eraser') cur={t:st.tool, c:st.color, w:st.tool==='eraser'?st.width*3:st.width, p:[...p]};
     else cur={t:st.tool, c:st.color, w:st.width, a:p, b:p};
     preview();
   });
   stage.addEventListener('pointermove', e=>{
     if(!cur) return; const p=pt(e);
+    if(cur.t==='tree'){ plantAt(p); return; }
     if(cur.p){ const n=cur.p.length; if(Math.hypot(p[0]-cur.p[n-2], p[1]-cur.p[n-1])>=2) cur.p.push(p[0],p[1]); }
-    else if(cur.t==='site'||cur.t==='bldg') cur.b=[snap(p[0]),snap(p[1])];
+    else if(cur.t==='road'){ let q=[snap(p[0]),snap(p[1])]; const dx=Math.abs(q[0]-cur.a[0]), dy=Math.abs(q[1]-cur.a[1]);
+      if(!e.altKey){ if(dy<dx*0.25) q[1]=cur.a[1]; else if(dx<dy*0.25) q[0]=cur.a[0]; } cur.b=q; }
+    else if(cur.t==='site'||cur.t==='bldg'||cur.t==='green') cur.b=[snap(p[0]),snap(p[1])];
     else cur.b=p;
     preview();
   });
   const end=async()=>{
     if(!cur) return; const c=cur; cur=null; xT.clearRect(0,0,W,H);
-    if(c.t==='site'||c.t==='bldg'){
+    if(c.t==='tree'){ if(c.n) changed(); else st.hist.pop(); return; }
+    if(c.t==='road'){
+      renderMine();
+      if(Math.hypot(c.b[0]-c.a[0], c.b[1]-c.a[1]) < 20) return;
+      const rd={a:c.a, b:c.b, m:c.m};
+      const hitB=[...st.bldgs.map(b=>({b,t:T})), ...otherBldgs()].find(x=>onRoad(x.b,rd));
+      if(hitB){ await dialog({title:'⚠️ 도로를 놓을 수 없어요', bad:true, msg:`${hitB.t.name}의 건물${hitB.b.name?`(${hitB.b.name})`:''}과 겹쳐요.\n건물을 피해서 그리거나, 그 조와 상의해요.`}); return; }
+      const r=await dialog({title:`🛣️ ${roadGrade(c.m)} ${c.m}m 도로`, msg:`길이 ${fmtN(Math.hypot(c.b[0]-c.a[0],c.b[1]-c.a[1])/PX_PER_M)}m`, inputs:[{k:'name',label:'도로 이름 (선택, 예: 중앙로)'}], buttons:[['취소',null],['놓기','ok','primary']]});
+      if(r.btn!=='ok') return;
+      commit(()=>st.roads.push({...rd, id:uid(), name:(r.values.name||'').trim().slice(0,12)}));
+      return;
+    }
+    if(c.t==='site'||c.t==='bldg'||c.t==='green'){
       const r=rectOf(c); if(r.w<SNAP||r.h<SNAP){ renderMine(); return; }
       const o={a:[r.x,r.y], b:[r.x+r.w,r.y+r.h]};
+      if(c.t==='green'){
+        if(st.greens.some(g=>overlaps(g,o))){ await dialog({title:'⚠️ 녹지가 겹쳐요', bad:true, msg:'녹지 구역끼리 겹치면 안 돼요. 빈 곳에 그려요.'}); return; }
+        const rdG=allRoads().find(rr=>onRoad(o,rr));
+        if(rdG){ await dialog({title:'⚠️ 녹지가 도로를 덮어요', bad:true, msg:`도로(${rdG.name?rdG.name+' · ':''}${roadGrade(rdG.m)} ${rdG.m}m) 위에는 녹지를 만들 수 없어요.\n도로 옆에 그려요.`}); return; }
+        const ob=[...st.bldgs.map(b=>({b,t:T})), ...otherBldgs()].find(x=>overlaps(x.b,o));
+        if(ob){ await dialog({title:'⚠️ 건물이 있어요', bad:true, msg:`${ob.t.name}의 건물 위에는 녹지를 만들 수 없어요.`}); return; }
+        commit(()=>st.greens.push({...o, id:uid(), kind:st.gKind})); toast(`${GKINDS[st.gKind].label} ${fmtN(areaM2(o))}㎡`);
+        return;
+      }
       if(c.t==='site'){
         if(st.sites.some(s=>overlaps(s,o))){ await dialog({title:'⚠️ 대지가 겹쳐요', bad:true, msg:'대지끼리 겹치면 안 돼요. 빈 곳에 그려요.'}); return; }
+        const rdS=allRoads().find(r=>onRoad(o,r));
+        if(rdS){ await dialog({title:'⚠️ 대지가 도로를 침범해요', bad:true, msg:`대지가 도로(${rdS.name?rdS.name+' · ':''}${roadGrade(rdS.m)} ${rdS.m}m)와 겹쳐요.\n도로 옆에 붙여서 그려요. (도로에 닿기만 하면 돼요)`}); return; }
         commit(()=>st.sites.push({...o, id:uid()})); toast(`대지${st.sites.length} · ${fmtN(areaM2(o))}㎡`);
       } else await addBldg(o);
       return;
@@ -736,12 +978,20 @@ async function teamPage(app, cls, tid){
     st.hist.push(snapS()); st.fut=[]; st.strokes.push(c); changed();
   };
   stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  function plantAt(p){
+    if(cur.last && Math.hypot(p[0]-cur.last[0], p[1]-cur.last[1])<34) return;
+    if(allRoads().some(r=>segPtDist(p,r.a,r.b)<r.m*PX_PER_M/2+4)) return;
+    if([...st.bldgs, ...otherBldgs().map(x=>x.b)].some(b=>hit(b,p))) return;
+    st.trees.push({p:[...p], kind:st.tKind, s:st.tKind==='pine'?44:40}); cur.last=p; cur.n++; renderMine();
+  }
   function preview(){
     if(cur.t==='eraser'){ renderMine(); xM.save(); drawStroke(xM,cur); xM.restore(); return; }
     xT.clearRect(0,0,W,H);
-    if(cur.t==='site'||cur.t==='bldg'){
-      const r=rectOf(cur), m2=r.w*r.h/(PX_PER_M*PX_PER_M);
-      xT.save(); xT.setLineDash(cur.t==='site'?[12,8]:[]); xT.lineWidth=3; xT.strokeStyle=T.color; xT.fillStyle=T.color; xT.globalAlpha=cur.t==='site'?.08:.4;
+    if(cur.t==='road'){ xT.save(); xT.globalAlpha=.8; drawRoad(xT, cur, false); xT.restore();
+      xT.font="700 16px 'Noto Sans KR', sans-serif"; xT.fillStyle='#1d2533'; xT.fillText(`${roadGrade(cur.m)} ${cur.m}m · 길이 ${fmtN(Math.hypot(cur.b[0]-cur.a[0],cur.b[1]-cur.a[1])/PX_PER_M)}m`, cur.b[0]+12, cur.b[1]-12); return; }
+    if(cur.t==='site'||cur.t==='bldg'||cur.t==='green'){
+      const r=rectOf(cur), m2=r.w*r.h/(PX_PER_M*PX_PER_M), gk=GKINDS[st.gKind];
+      xT.save(); xT.setLineDash(cur.t==='site'?[12,8]:[]); xT.lineWidth=3; xT.strokeStyle=cur.t==='green'?gk.edge:T.color; xT.fillStyle=cur.t==='green'?gk.fill:T.color; xT.globalAlpha=cur.t==='site'?.08:cur.t==='green'?.75:.4;
       xT.fillRect(r.x,r.y,r.w,r.h); xT.globalAlpha=1; xT.strokeRect(r.x,r.y,r.w,r.h);
       xT.font="700 16px 'Noto Sans KR', sans-serif"; xT.fillStyle='#1d2533'; xT.fillText(`${r.w/PX_PER_M}m × ${r.h/PX_PER_M}m = ${fmtN(m2)}㎡`, r.x+4, r.y-8<14?r.y+r.h+18:r.y-8);
       xT.restore(); return;
@@ -764,6 +1014,7 @@ async function overlayPage(app, cls){
     const city = d?.meta?.data?.city;
     const data = id => d?.teams?.[id]?.data || {};
     const fields = id => data(id).fields || {};
+    const roadsAll=TEAMS.flatMap(t=>data(t.id).roads||[]);
     app.innerHTML = `${banner()}
       <h2>${clsName(cls)} 도시 완성도 ${city?`— <span style="color:var(--ink)">${esc(city)}</span>`:''}</h2>
       <div class="workspace">
@@ -792,7 +1043,7 @@ async function overlayPage(app, cls){
       <ul class="checks" id="checks"></ul>
       <h3>조별 규칙 확인표</h3>
       <div style="overflow-x:auto"><table class="sum"><tr><th>조</th><th>용도지역</th><th>용도지구</th><th>대지면적</th><th>건물</th><th>건폐율 (지금 / 상한)</th><th>용적률 (지금 / 상한)</th><th>최고 층수</th><th>판정</th></tr>
-        ${TEAMS.map(t=>{ const f=fields(t.id), ev=evalTeam(f, data(t.id));
+        ${TEAMS.map(t=>{ const f=fields(t.id), ev=evalTeam(f, data(t.id), roadsAll);
           const judge = !ev.nB ? '―' : ev.issues.length ? '❌ '+esc(ev.issues[0]) : (ev.capB==null||ev.capF==null) ? '― (상한 없음)' : '✅ 통과';
           return `<tr><td><span class="dot" style="--c:${t.color}"></span>${t.name}</td><td>${esc(f.zone)||'―'}</td><td>${esc(f.district)||'―'}</td>
             <td>${ev.siteArea?fmtN(ev.siteArea)+'㎡':'―'}</td><td>${ev.nB}채</td>
@@ -804,16 +1055,24 @@ async function overlayPage(app, cls){
     // 6단계 자동 체크
     const ck=[];
     ck.push('✅ 기준점(+) — 모든 조가 같은 판에 그려서 자동으로 맞아요.');
-    const bad=TEAMS.filter(t=>evalTeam(fields(t.id),data(t.id)).issues.length);
-    ck.push(bad.length? `❌ 건폐율·용적률 — 규칙을 넘은 조: ${bad.map(t=>t.name).join(', ')}` : '✅ 건폐율·용적률 — 모든 조가 상한 안이에요.');
+    const bad=TEAMS.map(t=>({t, is:evalTeam(fields(t.id),data(t.id),roadsAll).issues})).filter(x=>x.is.length);
+    ck.push(bad.length? `❌ 건축 규칙(건폐율·용적률·도로 띄우기·높이) — ${bad.map(x=>`${x.t.name}: ${x.is.join(', ')}`).join(' / ')}` : '✅ 건축 규칙(건폐율·용적률·도로 띄우기·높이) — 모든 조가 지켰어요.');
     const lmEv=evalTeam(fields('landmark'),data('landmark')), hl=num(fields('landmark').hLimit);
-    ck.push(!lmEv.nB? '― 랜드마크 높이 — 아직 랜드마크 건물이 없어요.' : hl==null? `✅ 랜드마크 높이 — ${lmEv.maxFloors*FLOOR_M}m (고도지구 제한 없음)` : (lmEv.maxFloors*FLOOR_M<=hl? `✅ 랜드마크 높이 — ${lmEv.maxFloors*FLOOR_M}m ≤ 제한 ${hl}m` : `❌ 랜드마크 높이 — ${lmEv.maxFloors*FLOOR_M}m > 제한 ${hl}m`));
-    const gArea=evalTeam(fields('green'),data('green')).siteArea, gNow=gArea/BOARD_AREA*100, gGoal=num(fields('green').gRatio);
-    ck.push(!gArea? '― 녹지 비율 — 녹지조가 아직 대지(녹지)를 그리지 않았어요.' : `${gGoal==null||gNow>=gGoal?'✅':'❌'} 녹지 비율 — 지금 ${r1(gNow)}% (판 전체 ${fmtN(BOARD_AREA)}㎡ 중 ${fmtN(gArea)}㎡)${gGoal!=null?` · 목표 ${gGoal}%`:''}`);
+    ck.push(!lmEv.nB? '― 랜드마크 높이 — 아직 랜드마크 건물이 없어요.' : isSpecial(fields('landmark'))? `✅ 랜드마크 높이 — ${lmEv.maxH}m (특별건축구역: 높이 제한 완화)` : hl==null? `✅ 랜드마크 높이 — ${lmEv.maxH}m (고도지구 제한 없음)` : (lmEv.maxH<=hl? `✅ 랜드마크 높이 — ${lmEv.maxH}m ≤ 제한 ${hl}m` : `❌ 랜드마크 높이 — ${lmEv.maxH}m > 제한 ${hl}m`));
+    const gArea=(data('green').greens||[]).reduce((a,g)=>a+areaM2(g),0)+evalTeam(fields('green'),data('green')).siteArea, gNow=gArea/BOARD_AREA*100, gGoal=num(fields('green').gRatio);
+    ck.push(!gArea? '― 녹지 비율 — 녹지조가 아직 녹지 구역을 그리지 않았어요.' : `${gGoal==null||gNow>=gGoal?'✅':'❌'} 녹지 비율 — 지금 ${r1(gNow)}% (판 전체 ${fmtN(BOARD_AREA)}㎡ 중 ${fmtN(gArea)}㎡)${gGoal!=null?` · 목표 ${gGoal}%`:''}`);
     const all=[]; TEAMS.forEach(t=>(data(t.id).bldgs||[]).forEach(b=>all.push({t,b})));
     const clash=[]; for(let i=0;i<all.length;i++) for(let j=i+1;j<all.length;j++) if(all[i].t.id!==all[j].t.id && overlaps(all[i].b,all[j].b)) clash.push(`${all[i].t.name}–${all[j].t.name}`);
+    const tall=all.filter(x=>isSuperTall(x.b));
+    ck.push(tall.length? `🏙️ 초고층 — ${tall.map(x=>`${x.t.name} ${x.b.name||''} ${x.b.floors}층`).join(', ')}: 초고층 재난관리 특별법에 따라 피난안전구역(최대 30개 층마다)·종합방재실이 필요해요.` : '― 초고층 — 50층 이상 또는 200m 이상 건물이 없어요.');
     ck.push(clash.length? `❌ 건물 겹침 — 다른 조 건물끼리 겹쳐요: ${[...new Set(clash)].join(', ')}` : '✅ 건물 겹침 — 조끼리 겹치는 건물이 없어요.');
-    ck.push('☐ 도로와 건물이 겹치지 않고, 모든 집이 도로에 닿는가? — 평면에서 눈으로 확인해요.');
+    if(!roadsAll.length) ck.push('― 도로 — 교통·도로조가 아직 도로를 그리지 않았어요.');
+    else {
+      const onR=all.filter(x=>roadsAll.some(r=>onRoad(x.b,r)));
+      ck.push(onR.length? `❌ 도로 위 건물 — ${[...new Set(onR.map(x=>x.t.name))].join(', ')}의 건물이 도로와 겹쳐요.` : '✅ 도로 위 건물 — 도로와 겹치는 건물이 없어요.');
+      const noTouch=[]; ['housing','commerce','landmark'].forEach(id=>(data(id).sites||[]).forEach((s,i)=>{ if(!roadsAll.some(r=>touchRoad(s,r))) noTouch.push(`${TEAM[id].name} 대지${i+1}`); }));
+      ck.push(noTouch.length? `❌ 도로에 닿기 — 도로에 안 닿은 대지: ${noTouch.join(', ')} (대지는 도로에 2m 이상 닿아야 해요)` : '✅ 도로에 닿기 — 주거·상업·랜드마크 대지가 모두 도로에 닿아요.');
+    }
     $('#checks').innerHTML = ck.map(c=>`<li>${esc(c)}</li>`).join('');
 
     // 평면
@@ -821,7 +1080,7 @@ async function overlayPage(app, cls){
     const layers={};
     STACK.forEach(id=>{ const c=mkCanvas(); stage.appendChild(c); drawLayer(c.getContext('2d'), data(id), TEAM[id].color); layers[id]=c; });
     const grounds=Object.fromEntries(STACK.map(id=>[id, groundOf(data(id), TEAM[id].color)]));
-    const layers3d=()=>STACK.filter(id=>(vis[id]||{on:true}).on).map(id=>({color:TEAM[id].color, ground:grounds[id], bldgs:data(id).bldgs||[], alpha:(vis[id]?.a??100)/100}));
+    const layers3d=()=>STACK.filter(id=>(vis[id]||{on:true}).on).map(id=>({color:TEAM[id].color, ground:grounds[id], bldgs:data(id).bldgs||[], greens:data(id).greens||[], trees:data(id).trees||[], names:id==='landmark', alpha:(vis[id]?.a??100)/100}));
     let v3=null;
     function apply(){ TEAMS.forEach(t=>{ const v=vis[t.id]||{on:true,a:100}; layers[t.id].style.display=v.on?'':'none'; layers[t.id].style.opacity=v.a/100; }); ls.set('overlayVis',vis); if(v3) v3.draw(); }
     app.querySelectorAll('[data-on]').forEach(i=>i.onchange=()=>{ const id=i.dataset.on; vis[id]={...(vis[id]||{a:100}), on:i.checked}; apply(); });
