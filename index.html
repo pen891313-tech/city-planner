@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>우리 반 도시 만들기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f6fa; --card:#fff; --ink:#1d2533; --sub:#5b6577; --line:#dfe4ec; --navy:#1f3864; --accent:#2e5395;
+  --ok:#2e9e5b; --warn:#c0392b; --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',system-ui,sans-serif;font-size:15px}
+a{color:inherit}
+header.top{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--navy);color:#fff;position:sticky;top:0;z-index:20}
+header.top h1{font-size:18px;margin:0;font-weight:700;cursor:pointer}
+header.top .crumb{font-size:14px;opacity:.85;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.top .crumb a{text-decoration:none}
+header.top .crumb a:hover{text-decoration:underline}
+main{max-width:1400px;margin:0 auto;padding:18px 16px 60px}
+.banner{background:#fff4d6;border:1px solid #f0d58a;color:#6b5200;padding:8px 12px;border-radius:8px;margin-bottom:14px;font-size:13px}
+h2{font-size:20px;margin:6px 0 14px;color:var(--navy)}
+h3{font-size:15px;margin:16px 0 8px;color:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:#fff;color:var(--ink);
+  border-radius:8px;padding:8px 14px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;min-height:38px}
+.btn:hover{background:#f0f3f8}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#244579}
+.btn.danger{color:var(--warn);border-color:#efc3bd}
+.btn:disabled{opacity:.5;cursor:default}
+/* home */
+.grades{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.grade h3{margin-top:0}
+.classbtns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.classbtns a{padding:18px 0;font-size:17px}
+/* class page */
+.cityrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.cityrow input{font:inherit;font-size:17px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;min-width:200px}
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:18px}
+.team{border-left:6px solid var(--c);display:flex;flex-direction:column;gap:6px;text-decoration:none}
+.team:hover{box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.team b{font-size:17px}
+.team .meta{font-size:13px;color:var(--sub)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--c);vertical-align:middle;margin-right:4px}
+/* stage */
+.stage{position:relative;width:100%;aspect-ratio:1400/990;background:#fff;border:1px solid #c9d1dd;border-radius:6px;overflow:hidden;touch-action:none;user-select:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+@media (max-width:1000px){.workspace{grid-template-columns:1fr}}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.tool{min-width:44px;padding:6px 10px}
+.tool.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sep{width:1px;height:28px;background:var(--line);margin:0 4px}
+.sw{width:28px;height:28px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #aab;cursor:pointer;padding:0}
+.sw.on{box-shadow:0 0 0 3px var(--ink)}
+.status{font-size:13px;color:var(--sub);margin-left:auto}
+.status.dirty{color:var(--warn);font-weight:700}
+.status.saved{color:var(--ok)}
+/* form */
+.form label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+.form input,.form textarea,.form select{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.form textarea{min-height:56px;resize:vertical}
+.calc{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.calc .out{background:#eef2fa;border-radius:8px;padding:8px 10px;font-weight:700;color:var(--navy)}
+.calc .out small{display:block;font-weight:400;color:var(--sub);font-size:12px}
+.hint{font-size:12px;color:var(--sub);margin-top:4px}
+.hint.bad{color:var(--warn);font-weight:700}
+.roads{width:100%;border-collapse:collapse;font-size:13px}
+.roads td,.roads th{border:1px solid var(--line);padding:4px}
+.roads input{padding:5px 6px}
+/* overlay */
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;border-left:6px solid var(--c)}
+.layer input[type=range]{width:100%}
+table.sum{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px;background:#fff}
+table.sum th,table.sum td{border:1px solid var(--line);padding:6px 8px;text-align:center}
+table.sum th{background:#e8edf6}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal .card{max-width:440px;width:100%}
+.modal .acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:14px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2533;color:#fff;padding:10px 16px;border-radius:8px;z-index:60;font-size:14px}
+.muted{color:var(--sub);font-size:13px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 onclick="location.hash=''">🏙️ 우리 반 도시 만들기</h1>
+  <div class="crumb" id="crumb"></div>
+</header>
+<main id="app"></main>
+
+<script>
+const W = 1400, H = 990;
+const TEAMS = [
+  {id:'landmark', name:'랜드마크조', color:'#d64545', zone:'상업지 · 경관지구 주변'},
+  {id:'housing',  name:'주거조',     color:'#e08a1e', zone:'제1·2·3종 일반주거지역'},
+  {id:'green',    name:'녹지조',     color:'#2e9e5b', zone:'자연녹지 · 생산녹지 · 보전녹지'},
+  {id:'commerce', name:'상업조',     color:'#2f6fd6', zone:'근린상업 · 일반상업 · 중심상업'},
+  {id:'traffic',  name:'교통·도로조', color:'#4a4a4a', zone:'모든 구역을 잇는 도로 · 대중교통'},
+];
+const TEAM = Object.fromEntries(TEAMS.map(t => [t.id, t]));
+// 국토계획법 시행령 기준 상한 (건폐율 %, 용적률 %)
+const CAPS = {
+  '제1종전용주거지역':[50,100],'제2종전용주거지역':[50,150],'제1종일반주거지역':[60,200],'제2종일반주거지역':[60,250],
+  '제3종일반주거지역':[50,300],'준주거지역':[70,500],'중심상업지역':[90,1500],'일반상업지역':[80,1300],'근린상업지역':[70,900],
+  '유통상업지역':[80,1100],'전용공업지역':[70,300],'일반공업지역':[70,350],'준공업지역':[70,400],'보전녹지지역':[20,80],
+  '생산녹지지역':[20,100],'자연녹지지역':[20,100],'계획관리지역':[40,100],'생산관리지역':[20,80],'보전관리지역':[20,80]
+};
+const TEAM_FIELDS = {
+  landmark: [['lmName','랜드마크 이름과 종류 (예: 타워, 다리, 문화회관)'],['lmPlace','위치 (어느 구역 가까이?)'],['lmWhy','이 건물이 우리 도시를 상징하는 이유','area']],
+  housing:  [['hType','선택한 주거지역 (몇 종?)'],['hCount','예상 세대 수 / 단독주택 · 아파트 비율'],['hInfra','집 근처 필요한 인프라 (학교 · 공원 …)','area']],
+  green:    [['gType','녹지 종류 (공원 / 숲 / 하천 / 농지)'],['gRatio','도시 면적 대비 녹지 비율 목표 (%)'],['gGood','녹지가 도시에 주는 좋은 점 2가지','area'],['gBelt','개발제한구역(그린벨트)이 있나요? 있다면 어디?']],
+  commerce: [['cType','상업지역 종류와 이유','area'],['cShops','들어올 가게 · 시설 (시장, 마트, 영화관 …)'],['cWhy','사람들이 모이는 이유 (역세권? 큰길?)']],
+  traffic:  [['tNames','우리 도시의 큰 도로(중로 · 대로) 이름'],['tTransit','대중교통 계획 (버스 · 지하철 · 기차역)','area'],['tParking','주차장 위치']],
+};
+const PALETTE = ['#1d2533','#8a8f99','#d64545','#e08a1e','#e6c229','#2e9e5b','#2f6fd6','#7a4fd0','#8b5a2b','#ffffff'];
+
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clsName = c => `${c[0]}학년 ${c[2]}반`;
+const fmtTime = iso => { if(!iso) return ''; const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function choose(msg, buttons){
+  return new Promise(res=>{
+    const m=document.createElement('div'); m.className='modal';
+    m.innerHTML=`<div class="card"><div style="white-space:pre-line;line-height:1.6">${esc(msg)}</div><div class="acts"></div></div>`;
+    buttons.forEach(([label,val,cls])=>{ const b=document.createElement('button'); b.className='btn '+(cls||''); b.textContent=label; b.onclick=()=>{m.remove();res(val)}; $('.acts',m).appendChild(b); });
+    document.body.appendChild(m);
+  });
+}
+const ls = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch{ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} },
+  del(k){ try{ localStorage.removeItem(k); }catch{} },
+};
+
+/* ---------------- API (서버, 없으면 이 기기 저장) ---------------- */
+let OFFLINE = false;
+async function apiGet(cls, team){
+  if(!OFFLINE){
+    try{
+      const r = await fetch(`/api/data?cls=${cls}${team?'&team='+team:''}`, {cache:'no-store'});
+      if(r.ok && (r.headers.get('content-type')||'').includes('json')) return await r.json();
+      throw new Error('no api');
+    }catch(e){ OFFLINE = true; }
+  }
+  if(team) return ls.get(`cp:${cls}/${team}`);
+  const out={meta:ls.get(`cp:${cls}/meta`), teams:{}};
+  TEAMS.forEach(t=>out.teams[t.id]=ls.get(`cp:${cls}/${t.id}`));
+  return out;
+}
+async function apiPut(cls, team, body){
+  if(!OFFLINE){
+    try{
+      const r = await fetch(`/api/data?cls=${cls}&team=${team}`, {method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+      const j = await r.json();
+      if(r.status===409) return {conflict:true, current:j.current};
+      if(!r.ok) throw new Error(j.error||r.status);
+      return j;
+    }catch(e){ return {error:String(e.message||e)}; }
+  }
+  const key=`cp:${cls}/${team}`, cur=ls.get(key), v=cur?.version??0;
+  if(!body.force && (body.baseVersion??0)!==v) return {conflict:true, current:cur};
+  const rec={data:body.data, version:v+1, savedAt:new Date().toISOString(), savedBy:body.savedBy||''};
+  ls.set(key, rec); return {ok:true, version:rec.version, savedAt:rec.savedAt};
+}
+
+/* ---------------- 그리기 ---------------- */
+function drawBg(ctx){
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#eef1f5'; ctx.lineWidth=1;
+  for(let x=50;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=50;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.strokeStyle='#dde2ea';
+  for(let x=250;x<W;x+=250){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=250;y<H;y+=250){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.strokeStyle='#888'; ctx.lineWidth=3;
+  [[30,30],[W-30,30],[30,H-30],[W-30,H-30]].forEach(([x,y])=>{ctx.beginPath();ctx.moveTo(x-14,y);ctx.lineTo(x+14,y);ctx.moveTo(x,y-14);ctx.lineTo(x,y+14);ctx.stroke();});
+}
+function drawStroke(ctx, s){
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=s.w||4;
+  if(s.t==='eraser'){ ctx.globalCompositeOperation='destination-out'; ctx.strokeStyle='#000'; ctx.fillStyle='#000'; }
+  else { ctx.strokeStyle=s.c; ctx.fillStyle=s.c; }
+  if(s.t==='pen'||s.t==='eraser'){
+    const p=s.p; if(!p||p.length<2){ctx.restore();return;}
+    if(p.length===2){ ctx.beginPath(); ctx.arc(p[0],p[1],ctx.lineWidth/2,0,Math.PI*2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.moveTo(p[0],p[1]); for(let i=2;i<p.length;i+=2) ctx.lineTo(p[i],p[i+1]); ctx.stroke(); }
+  } else if(s.t==='line'){
+    ctx.beginPath(); ctx.moveTo(s.a[0],s.a[1]); ctx.lineTo(s.b[0],s.b[1]); ctx.stroke();
+  } else if(s.t==='rect'||s.t==='fill'){
+    const x=Math.min(s.a[0],s.b[0]), y=Math.min(s.a[1],s.b[1]), w=Math.abs(s.a[0]-s.b[0]), h=Math.abs(s.a[1]-s.b[1]);
+    if(s.t==='fill'){ ctx.globalAlpha=.35; ctx.fillRect(x,y,w,h); ctx.globalAlpha=1; }
+    ctx.strokeRect(x,y,w,h);
+  } else if(s.t==='text'){
+    ctx.font=`700 ${s.size||28}px 'Noto Sans KR', sans-serif`; ctx.textBaseline='middle';
+    ctx.lineWidth=5; ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.strokeText(s.text,s.a[0],s.a[1]);
+    ctx.fillText(s.text,s.a[0],s.a[1]);
+  }
+  ctx.restore();
+}
+function drawLayer(ctx, strokes){ ctx.clearRect(0,0,W,H); (strokes||[]).forEach(s=>drawStroke(ctx,s)); }
+function mkCanvas(){ const c=document.createElement('canvas'); c.width=W; c.height=H; return c; }
+
+/* ---------------- 계산 ---------------- */
+const num = v => { const n=parseFloat(String(v??'').replace(/,/g,'')); return isFinite(n)?n:null; };
+const r1 = n => Math.round(n*10)/10;
+function calc(f){
+  const bcr=num(f.bcr), far=num(f.far), site=num(f.site);
+  return {
+    build: (bcr!=null&&site!=null)? r1(site*bcr/100):null,
+    floor: (far!=null&&site!=null)? r1(site*far/100):null,
+    floors:(bcr&&far!=null)? Math.floor(far/bcr):null,
+  };
+}
+
+/* ---------------- 화면 ---------------- */
+let cleanup = null;
+function setCrumb(parts){ $('#crumb').innerHTML = parts.map(([t,h])=>h?`<a href="${h}">${esc(t)}</a>`:esc(t)).join(' › '); }
+function banner(){ return OFFLINE?`<div class="banner">⚠️ 서버에 연결되지 않아 <b>이 기기에만</b> 저장되는 미리보기 모드예요. Netlify에 배포하면 반 전체가 함께 저장됩니다.</div>`:''; }
+
+async function route(){
+  if(cleanup){ const c=cleanup; cleanup=null; c(); }
+  const h=location.hash.replace(/^#\/?/,'').split('/');
+  const app=$('#app');
+  if(h[0]==='c' && /^[1-3]-[1-3]$/.test(h[1]||'')){
+    if(h[2]==='t' && TEAM[h[3]]) return teamPage(app,h[1],h[3]);
+    if(h[2]==='overlay') return overlayPage(app,h[1]);
+    return classPage(app,h[1]);
+  }
+  homePage(app);
+}
+
+function homePage(app){
+  setCrumb([['반 선택']]);
+  app.innerHTML = `<h2>우리 반을 골라 주세요</h2><div class="grades">${[1,2,3].map(g=>`
+    <div class="card grade"><h3>${g}학년</h3><div class="classbtns">${[1,2,3].map(c=>`<a class="btn" href="#/c/${g}-${c}">${c}반</a>`).join('')}</div></div>`).join('')}
+  </div><p class="muted" style="margin-top:18px">반을 고른 뒤 우리 조를 눌러 계획을 그리고 <b>저장</b>하세요. 다음 시간에 같은 반 · 같은 조로 들어오면 이어서 작업할 수 있어요.</p>`;
+}
+
+async function classPage(app, cls){
+  setCrumb([['반 선택','#'],[clsName(cls)]]);
+  app.innerHTML = `<p class="muted">불러오는 중…</p>`;
+  const d = await apiGet(cls);
+  const meta = d?.meta;
+  app.innerHTML = `${banner()}
+    <h2>${clsName(cls)} 도시 계획</h2>
+    <div class="cityrow card">
+      <b>우리 반이 정한 도시</b>
+      <input id="city" placeholder="예) 세종" value="${esc(meta?.data?.city)}">
+      <button class="btn primary" id="saveCity">도시 저장</button>
+      <span class="muted" id="cityMsg">${meta?.savedAt?'저장: '+fmtTime(meta.savedAt):''}</span>
+    </div>
+    <h3>조를 골라 들어가세요</h3>
+    <div class="teams">${TEAMS.map(t=>{ const r=d?.teams?.[t.id]; const n=r?.data?.strokes?.length||0;
+      return `<a class="card team" style="--c:${t.color}" href="#/c/${cls}/t/${t.id}">
+        <b><span class="dot"></span>${t.name}</b>
+        <span class="meta">${esc(t.zone)}</span>
+        <span class="meta">${r?`마지막 저장 ${fmtTime(r.savedAt)} · 그림 ${n}개`:'아직 저장 안 됨'}</span>
+        ${r?.data?.fields?.members?`<span class="meta">조원: ${esc(r.data.fields.members)}</span>`:''}
+      </a>`;}).join('')}
+    </div>
+    <a class="btn primary" style="font-size:16px;padding:12px 20px" href="#/c/${cls}/overlay">🗺️ 5개 조 겹쳐 보기</a>`;
+  $('#saveCity').onclick = async ()=>{
+    const res = await apiPut(cls,'meta',{data:{city:$('#city').value.trim()}, force:true});
+    $('#cityMsg').textContent = res.ok? '저장됨 '+fmtTime(res.savedAt) : '저장 실패: '+(res.error||'');
+  };
+}
+
+async function teamPage(app, cls, tid){
+  const T = TEAM[tid];
+  setCrumb([['반 선택','#'],[clsName(cls),`#/c/${cls}`],[T.name]]);
+  app.innerHTML = `<p class="muted">불러오는 중…</p>`;
+  const [rec, all] = await Promise.all([apiGet(cls,tid), apiGet(cls)]);
+  const draftKey = `draft:${cls}/${tid}`;
+  const st = { strokes: rec?.data?.strokes||[], fields: rec?.data?.fields||{}, version: rec?.version||0, savedAt: rec?.savedAt||null,
+               redo:[], dirty:false, tool:'pen', color:T.color, width:6, showOthers:true };
+  const draft = ls.get(draftKey);
+  let restored = false;
+  if(draft && draft.baseVersion===st.version && (!st.savedAt || draft.ts > Date.parse(st.savedAt))){
+    st.strokes=draft.strokes; st.fields=draft.fields; st.dirty=true; restored=true;
+  } else if(draft) ls.del(draftKey);
+  const others = TEAMS.filter(t=>t.id!==tid).map(t=>({t, strokes: all?.teams?.[t.id]?.data?.strokes||[]}));
+
+  const calcFields = `
+    <div class="calc">
+      <div style="grid-column:1/3"><label>① 용도지역</label><input data-f="zone" list="zones" placeholder="예) 제2종일반주거지역"></div>
+      <div style="grid-column:1/3"><label>② 용도지구 (없으면 ―)</label><input data-f="district" placeholder="예) 고도지구, 경관지구"></div>
+      <div><label>③ 건폐율 (%)</label><input data-f="bcr" inputmode="decimal"></div>
+      <div><label>④ 용적률 (%)</label><input data-f="far" inputmode="decimal"></div>
+      <div style="grid-column:1/3"><label>⑤ 대지면적 (㎡)</label><input data-f="site" inputmode="decimal"></div>
+      <div class="hint" id="capHint" style="grid-column:1/3"></div>
+      <div class="out"><small>⑥ 건축면적 최대</small><span id="oBuild">―</span></div>
+      <div class="out"><small>⑦ 연면적 최대</small><span id="oFloor">―</span></div>
+      <div class="out" style="grid-column:1/3"><small>⑧ 최대 층수 ≈ 용적률 ÷ 건폐율</small><span id="oFloors">―</span></div>
+    </div>`;
+  const extra = tid==='landmark' ? `
+      <h3>높이 확인</h3>
+      <div class="calc">
+        <div><label>고도지구 높이 제한 (m)</label><input data-f="hLimit" inputmode="decimal" placeholder="없으면 비움"></div>
+        <div><label>랜드마크 층수</label><input data-f="lmFloors" inputmode="numeric"></div>
+        <div class="out" style="grid-column:1/3"><small>높이 ≈ 층수 × 3m</small><span id="oHeight">―</span></div>
+      </div>` : tid==='traffic' ? `
+      <h3>도로 등급</h3>
+      <table class="roads"><tr><th>구분</th><th>폭(참고)</th><th>도로 이름</th><th>정한 폭(m)</th></tr>
+        ${[['so','소로','12m 미만'],['jung','중로','12~25m'],['dae','대로','25~40m']].map(([k,n,w])=>`<tr><td>${n}</td><td>${w}</td><td><input data-f="r_${k}_name"></td><td><input data-f="r_${k}_w" inputmode="decimal"></td></tr>`).join('')}
+      </table>
+      <p class="hint">집이 4m 미만 좁은 길에 붙어 있으면 길 중심에서 2m 물러서 지어야 해요(건축선 후퇴).</p>` : '';
+
+  app.innerHTML = `${banner()}
+    <h2><span class="dot" style="--c:${T.color}"></span>${clsName(cls)} · ${T.name} <span class="muted" style="font-weight:400">— ${esc(T.zone)}</span></h2>
+    <div class="workspace">
+      <div>
+        <div class="toolbar">
+          ${[['pen','✏️ 펜'],['line','📏 직선'],['rect','▭ 네모'],['fill','▦ 칠한 네모'],['text','🔤 글자'],['eraser','🧽 지우개']].map(([k,l])=>`<button class="btn tool" data-tool="${k}">${l}</button>`).join('')}
+          <span class="sep"></span>
+          ${[3,6,12,24].map(w=>`<button class="btn tool" data-w="${w}" title="굵기 ${w}"><span style="display:inline-block;width:${[3,6,12,24].indexOf(w)*4+4}px;height:${[3,6,12,24].indexOf(w)*4+4}px;border-radius:50%;background:currentColor"></span></button>`).join('')}
+          <span class="sep"></span>
+          ${[T.color,...PALETTE.filter(c=>c!==T.color)].map(c=>`<button class="sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join('')}
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="undo">↶ 되돌리기</button>
+          <button class="btn" id="redo">↷ 다시</button>
+          <button class="btn danger" id="clear">전체 지우기</button>
+          <label class="btn"><input type="checkbox" id="others" checked> 다른 조 흐리게 보기</label>
+          <button class="btn primary" id="save">💾 저장</button>
+          <span class="status" id="status"></span>
+        </div>
+        <div class="stage" id="stage"></div>
+        <p class="muted">네 모서리의 <b>+</b>는 기준점이에요. 모든 조가 같은 판에 그리니, 겹쳐 보기에서 자동으로 맞춰져요. 격자 한 칸은 작은 칸 50, 굵은 칸 250 단위예요.</p>
+      </div>
+      <div class="card form">
+        <h3 style="margin-top:0">우리 조 정보</h3>
+        <label>조원 이름</label><input data-f="members" placeholder="예) 김OO, 이OO, 박OO">
+        <h3>규칙 계산</h3>
+        ${calcFields}
+        ${extra}
+        <h3>우리 조 계획</h3>
+        ${TEAM_FIELDS[tid].map(([k,l,ty])=>`<label>${esc(l)}</label>${ty==='area'?`<textarea data-f="${k}"></textarea>`:`<input data-f="${k}">`}`).join('')}
+      </div>
+    </div>
+    <datalist id="zones">${Object.keys(CAPS).map(z=>`<option value="${z}">`).join('')}</datalist>`;
+
+  // stage
+  const stage=$('#stage');
+  const cBg=mkCanvas(), cOthers=mkCanvas(), cMine=mkCanvas(), cTmp=mkCanvas();
+  [cBg,cOthers,cMine,cTmp].forEach(c=>stage.appendChild(c));
+  cOthers.style.opacity=.28;
+  drawBg(cBg.getContext('2d'));
+  const xO=cOthers.getContext('2d'), xM=cMine.getContext('2d'), xT=cTmp.getContext('2d');
+  function renderOthers(){ xO.clearRect(0,0,W,H); if(st.showOthers){ others.forEach(o=>{ const c=mkCanvas(); drawLayer(c.getContext('2d'),o.strokes); xO.drawImage(c,0,0); }); } }
+  const renderMine=()=>drawLayer(xM, st.strokes);
+  renderOthers(); renderMine();
+
+  // form
+  const inputs=[...app.querySelectorAll('[data-f]')];
+  inputs.forEach(i=>{ i.value = st.fields[i.dataset.f] ?? ''; i.addEventListener('input', ()=>{ st.fields[i.dataset.f]=i.value; markDirty(); updateCalc(); }); });
+  function updateCalc(){
+    const f=st.fields, c=calc(f);
+    $('#oBuild').textContent = c.build!=null? `${c.build} ㎡`:'―';
+    $('#oFloor').textContent = c.floor!=null? `${c.floor} ㎡`:'―';
+    $('#oFloors').textContent = c.floors!=null? `${c.floors} 층`:'―';
+    const cap = CAPS[(f.zone||'').replace(/\s/g,'')]; const hint=$('#capHint');
+    if(cap){
+      const over=[]; if(num(f.bcr)>cap[0]) over.push('건폐율'); if(num(f.far)>cap[1]) over.push('용적률');
+      hint.className='hint'+(over.length?' bad':'');
+      hint.textContent = `국가 상한: 건폐율 ${cap[0]}% · 용적률 ${cap[1]}%` + (over.length?`  ⚠️ ${over.join('·')}이(가) 국가 상한을 넘어요!`:'  (우리 도시 조례 숫자는 이보다 작거나 같아요)');
+    } else hint.textContent='';
+    if(tid==='landmark'){
+      const fl=num(f.lmFloors), lim=num(f.hLimit), out=$('#oHeight');
+      if(fl==null) out.textContent='―';
+      else { const h=fl*3; out.textContent = `${h} m` + (lim!=null ? (h<=lim?'  ✅ 제한 안':'  ❌ 높이 제한 초과 — 층수를 줄이거나 위치를 바꿔요') : ''); }
+    }
+  }
+  updateCalc();
+
+  // toolbar
+  function syncTools(){
+    app.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on', b.dataset.tool===st.tool));
+    app.querySelectorAll('[data-w]').forEach(b=>b.classList.toggle('on', +b.dataset.w===st.width));
+    app.querySelectorAll('[data-c]').forEach(b=>b.classList.toggle('on', b.dataset.c===st.color));
+  }
+  app.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{st.tool=b.dataset.tool; syncTools();});
+  app.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{st.width=+b.dataset.w; syncTools();});
+  app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{st.color=b.dataset.c; if(st.tool==='eraser') st.tool='pen'; syncTools();});
+  syncTools();
+  $('#others').onchange=e=>{st.showOthers=e.target.checked; renderOthers();};
+  $('#undo').onclick=undo; $('#redo').onclick=redo;
+  $('#clear').onclick=async()=>{ if(!st.strokes.length) return; const ok=await choose('우리 조 그림을 모두 지울까요?\n(저장하기 전까지는 되돌리기로 살릴 수 있어요)',[['취소',false],['모두 지우기',true,'danger']]); if(ok){ st.redo=[{clear:st.strokes}]; st.strokes=[]; renderMine(); markDirty(); } };
+  function undo(){ if(!st.strokes.length) return; st.redo.push(st.strokes.pop()); renderMine(); markDirty(); }
+  function redo(){ const s=st.redo.pop(); if(!s) return; if(s.clear) st.strokes=s.clear; else st.strokes.push(s); renderMine(); markDirty(); }
+
+  // status & draft
+  function setStatus(){
+    const el=$('#status'); if(!el) return;
+    if(st.dirty){ el.className='status dirty'; el.textContent='● 저장 안 됨'; }
+    else { el.className='status saved'; el.textContent = st.savedAt? `✓ 저장됨 ${fmtTime(st.savedAt)}`:'아직 저장 전'; }
+  }
+  let draftTimer=null;
+  function markDirty(){ st.dirty=true; setStatus(); clearTimeout(draftTimer); draftTimer=setTimeout(()=>ls.set(draftKey,{strokes:st.strokes,fields:st.fields,baseVersion:st.version,ts:Date.now()}),400); }
+  setStatus();
+  if(restored) toast('저장하지 않은 작업을 이 기기에서 불러왔어요. 꼭 저장하세요!');
+
+  // save
+  async function save(force){
+    const btn=$('#save'); btn.disabled=true; btn.textContent='저장 중…';
+    const res = await apiPut(cls, tid, {data:{strokes:st.strokes, fields:st.fields}, baseVersion:st.version, force, savedBy:st.fields.members||''});
+    btn.disabled=false; btn.textContent='💾 저장';
+    if(res.conflict){
+      const pick = await choose(`다른 기기에서 ${fmtTime(res.current?.savedAt)}에 먼저 저장한 내용이 있어요.\n어떻게 할까요?`,
+        [['취소','cancel'],['저장된 것 불러오기','load'],['내 것으로 덮어쓰기','force','primary']]);
+      if(pick==='force') return save(true);
+      if(pick==='load'){ st.strokes=res.current?.data?.strokes||[]; st.fields=res.current?.data?.fields||{}; st.version=res.current?.version||0; st.savedAt=res.current?.savedAt;
+        st.dirty=false; ls.del(draftKey); inputs.forEach(i=>i.value=st.fields[i.dataset.f]??''); renderMine(); updateCalc(); setStatus(); }
+      return;
+    }
+    if(res.error){ toast('저장 실패: '+res.error+' — 인터넷 연결을 확인하고 다시 눌러 주세요'); return; }
+    st.version=res.version; st.savedAt=res.savedAt; st.dirty=false; ls.del(draftKey); setStatus(); toast('저장했어요!');
+  }
+  $('#save').onclick=()=>save(false);
+
+  // pointer drawing
+  let cur=null;
+  const pt = e => { const r=cTmp.getBoundingClientRect(); return [Math.round((e.clientX-r.left)*W/r.width), Math.round((e.clientY-r.top)*H/r.height)]; };
+  stage.addEventListener('pointerdown', async e=>{
+    if(e.button>0) return;
+    const p=pt(e);
+    if(st.tool==='text'){
+      const text = prompt('그림 위에 쓸 글자 (예: 시청, 중앙공원)'); if(!text) return;
+      st.strokes.push({t:'text', a:p, text:text.slice(0,40), c:st.color, size:Math.max(20, st.width*4)}); st.redo=[]; renderMine(); markDirty(); return;
+    }
+    stage.setPointerCapture(e.pointerId);
+    cur = (st.tool==='pen'||st.tool==='eraser') ? {t:st.tool, c:st.color, w:st.tool==='eraser'?st.width*3:st.width, p:[...p]} : {t:st.tool, c:st.color, w:st.width, a:p, b:p};
+    preview();
+  });
+  stage.addEventListener('pointermove', e=>{
+    if(!cur) return; const p=pt(e);
+    if(cur.p){ const n=cur.p.length; if(Math.hypot(p[0]-cur.p[n-2], p[1]-cur.p[n-1])>=2) cur.p.push(p[0],p[1]); }
+    else cur.b=p;
+    preview();
+  });
+  const end=()=>{ if(!cur) return; xT.clearRect(0,0,W,H); st.strokes.push(cur); cur=null; st.redo=[]; renderMine(); markDirty(); };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  function preview(){
+    if(cur.t==='eraser'){ renderMine(); drawStroke(xM,cur); return; }
+    xT.clearRect(0,0,W,H); drawStroke(xT,cur);
+  }
+  const key=e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); e.shiftKey?redo():undo(); } };
+  const before=e=>{ if(st.dirty){ e.preventDefault(); e.returnValue=''; } };
+  window.addEventListener('keydown',key); window.addEventListener('beforeunload',before);
+  cleanup=()=>{ window.removeEventListener('keydown',key); window.removeEventListener('beforeunload',before); };
+}
+
+async function overlayPage(app, cls){
+  setCrumb([['반 선택','#'],[clsName(cls),`#/c/${cls}`],['겹쳐 보기']]);
+  app.innerHTML = `<p class="muted">불러오는 중…</p>`;
+  const vis = ls.get('overlayVis') || {};
+  async function load(){
+    const d = await apiGet(cls);
+    const city = d?.meta?.data?.city;
+    app.innerHTML = `${banner()}
+      <h2>${clsName(cls)} 도시 완성도 ${city?`— <span style="color:var(--ink)">${esc(city)}</span>`:''}</h2>
+      <div class="workspace">
+        <div>
+          <div class="stage" id="stage"></div>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="btn" id="reload">🔄 새로 불러오기</button>
+            <button class="btn primary" id="png">🖼️ 이미지로 저장</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0">조별 필름 (켜기/끄기 · 진하기)</h3>
+          <div class="layers">${TEAMS.map(t=>{ const r=d?.teams?.[t.id]; const v=vis[t.id]||{on:true,a:100};
+            return `<div class="layer" style="--c:${t.color}">
+              <label><input type="checkbox" data-on="${t.id}" ${v.on?'checked':''}> <b>${t.name}</b></label>
+              <span class="muted">${r?'저장 '+fmtTime(r.savedAt):'저장 없음'}</span>
+              <span class="muted">진하기</span><input type="range" min="10" max="100" value="${v.a}" data-a="${t.id}">
+            </div>`;}).join('')}
+          </div>
+          <p class="muted">필름은 녹지(맨 아래) → 교통 → 주거 → 상업 → 랜드마크(맨 위) 순서로 쌓여요.</p>
+        </div>
+      </div>
+      <h3>조별 규칙 확인표</h3>
+      <div style="overflow-x:auto"><table class="sum"><tr><th>조</th><th>용도지역</th><th>용도지구</th><th>건폐율</th><th>용적률</th><th>대지면적</th><th>최대 층수</th><th>국가 상한 확인</th></tr>
+        ${TEAMS.map(t=>{ const f=d?.teams?.[t.id]?.data?.fields||{}; const c=calc(f); const cap=CAPS[(f.zone||'').replace(/\s/g,'')];
+          let chk='―'; if(cap&&(num(f.bcr)!=null||num(f.far)!=null)) chk=(num(f.bcr)>cap[0]||num(f.far)>cap[1])?'❌ 초과':'✅ 통과';
+          return `<tr><td><span class="dot" style="--c:${t.color}"></span>${t.name}</td><td>${esc(f.zone)||'―'}</td><td>${esc(f.district)||'―'}</td><td>${f.bcr?esc(f.bcr)+'%':'―'}</td><td>${f.far?esc(f.far)+'%':'―'}</td><td>${f.site?esc(f.site)+'㎡':'―'}</td><td>${c.floors!=null?c.floors+'층':'―'}</td><td>${chk}</td></tr>`;}).join('')}
+      </table></div>`;
+    const order=['green','traffic','housing','commerce','landmark'];
+    const stage=$('#stage'); const bg=mkCanvas(); stage.appendChild(bg); drawBg(bg.getContext('2d'));
+    const layers={};
+    order.forEach(id=>{ const c=mkCanvas(); stage.appendChild(c); drawLayer(c.getContext('2d'), d?.teams?.[id]?.data?.strokes||[]); layers[id]=c; });
+    function apply(){ TEAMS.forEach(t=>{ const v=vis[t.id]||{on:true,a:100}; layers[t.id].style.display=v.on?'':'none'; layers[t.id].style.opacity=v.a/100; }); ls.set('overlayVis',vis); }
+    app.querySelectorAll('[data-on]').forEach(i=>i.onchange=()=>{ const id=i.dataset.on; vis[id]={...(vis[id]||{a:100}), on:i.checked}; apply(); });
+    app.querySelectorAll('[data-a]').forEach(i=>i.oninput=()=>{ const id=i.dataset.a; vis[id]={...(vis[id]||{on:true}), a:+i.value}; apply(); });
+    apply();
+    $('#reload').onclick=load;
+    $('#png').onclick=()=>{
+      const out=mkCanvas(), x=out.getContext('2d'); x.drawImage(bg,0,0);
+      order.forEach(id=>{ const v=vis[id]||{on:true,a:100}; if(!v.on) return; x.globalAlpha=v.a/100; x.drawImage(layers[id],0,0); });
+      x.globalAlpha=1; x.font="700 30px 'Noto Sans KR', sans-serif"; x.fillStyle='#1f3864'; x.fillText(`${clsName(cls)} ${city||''} 도시 계획`, 60, 70);
+      out.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`${clsName(cls).replace(/ /g,'')}_도시계획.png`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); });
+    };
+  }
+  await load();
+}
+
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
