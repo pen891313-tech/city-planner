@@ -147,6 +147,20 @@ table.sum th{background:#e8edf6}
 .wshop-item{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:4px;align-items:center}
 .wshop-item.own{border-color:var(--ok);background:#eefaf1}
 .tbg{display:flex;flex-wrap:wrap;gap:8px}
+.wsta{width:60px}
+.wsta i{background:#7fd3ff}
+.wsta i.ex{background:#ff7a7a}
+.wstat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;text-align:left}
+@media (max-width:700px){.wstat-grid{grid-template-columns:1fr}}
+.wstat{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.wstat .btn{align-self:flex-start;min-height:32px;padding:4px 12px}
+.wlv{color:#f2a33a;letter-spacing:1px}
+.wlvup{color:#d4800a}
+.wshop-item .btn{font-size:13px;padding:5px 8px;min-height:32px}
+.enh-ok{animation:enhok .8s}
+.enh-fail{animation:enhfail .5s}
+@keyframes enhok{0%{box-shadow:0 0 0 0 #f2c94c}50%{box-shadow:0 0 0 8px #f2c94c88}100%{box-shadow:none}}
+@keyframes enhfail{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 .tbg .btn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .v3tools{position:absolute;right:8px;top:8px;display:flex;gap:4px;z-index:3}
 .v3tools button{min-height:32px;padding:4px 10px;background:rgba(255,255,255,.92)}
@@ -1294,14 +1308,24 @@ function cleanChat(t){
   return s;
 }
 const GOAL = 100, MAX_ITEMS = 2;
+// 아이템 (개수 제한 없음, 강화 +0~+5)
 const ITEMS = {
-  shoes:  {icon:'👟', name:'운동화',       cost:15, desc:'이동 속도 +15%'},
-  jump:   {icon:'🦘', name:'점프 신발',    cost:15, desc:'점프 높이 2배 — 공중의 파란 동전(3개짜리)을 먹을 수 있어요'},
-  magnet: {icon:'🧲', name:'자석',         cost:20, desc:'동전 줍는 범위 2배'},
-  alarm:  {icon:'🔔', name:'뒤통수 경보기', cost:20, desc:'누가 뒤로 다가오면 화면에 알려 줘요'},
-  bag:    {icon:'🎒', name:'튼튼한 가방',   cost:25, desc:'잡혀도 동전을 절반만 빼앗겨요 · 대신 속도 -10%'},
-  radar:  {icon:'📡', name:'레이더',       cost:20, desc:'미니맵에 60m 안의 친구들이 보여요'},
+  shoes:  {icon:'👟', name:'운동화',       cost:15, eff:l=>`이동 속도 +${15+3*l}%`},
+  jump:   {icon:'🦘', name:'점프 신발',    cost:15, eff:l=>`점프 ×${(1.4+0.05*l).toFixed(2)} — 공중 파란 동전(3개짜리)`},
+  magnet: {icon:'🧲', name:'자석',         cost:20, eff:l=>`줍는 범위 ×${(2+0.2*l).toFixed(1)}`},
+  alarm:  {icon:'🔔', name:'뒤통수 경보기', cost:20, eff:l=>`${7+1.5*l}m 안에서 뒤로 다가오면 알림`},
+  bag:    {icon:'🎒', name:'튼튼한 가방',   cost:25, eff:l=>`잡혀도 ${50-5*l}%만 잃음 · 속도 -${10-2*l}%`},
+  radar:  {icon:'📡', name:'레이더',       cost:20, eff:l=>`미니맵에 ${60+20*l}m 안 친구 표시`},
 };
+const ENH = [{cost:5,p:0.9},{cost:8,p:0.75},{cost:12,p:0.6},{cost:16,p:0.45},{cost:20,p:0.3}];  // +1 ~ +5
+// 스탯 (최대 5레벨, 가격 3·5·7·9·11)
+const STATS = {
+  sp:  {icon:'🏃', name:'속도', desc:l=>`이동 +${l*3}%`, max:5},
+  sta: {icon:'⚡', name:'체력', desc:l=>`달리기 ${5+l}초`, max:5},
+  rch: {icon:'🫣', name:'손길', desc:l=>`잡기 거리 ${(1.9+0.15*l).toFixed(2)}m · 대기 ${(3-0.25*l).toFixed(2)}초`, max:5},
+  def: {icon:'🛡️', name:'방어', desc:l=>`잡혔을 때 ${l*8}% 덜 잃음`, max:5},
+};
+const STAT_COST = l => 3 + 2*l;   // 0→1: 3, 1→2: 5, … 4→5: 11
 const THEMES = {
   day:    {label:'☀️ 낮',      sky:'#bfe0ff', fog:[160,520], hemi:1.45, sun:1.35, sunC:'#ffffff', grass:'#a9cf8e', crown:'#4aa356'},
   sunset: {label:'🌇 저녁노을', sky:'#f4b28c', fog:[120,430], hemi:1.05, sun:1.15, sunC:'#ffb27a', grass:'#9db57d', crown:'#4c9a4f'},
@@ -1332,7 +1356,7 @@ async function walkPage(app, cls){
       <div class="muted" style="margin-top:12px;line-height:1.7">
         🪙 동전을 <b>${GOAL}개</b> 모으면 <b>사람으로 변신</b>! 먼저 변신한 순서대로 순위표에 올라요.<br>
         🫣 친구 <b>등 뒤</b>에서 <b>E키</b>를 누르면 그 친구의 동전을 빼앗아요. 🌳 공원·숲은 <b>안전 구역</b>이에요.<br>
-        🛒 <b>B키</b>로 상점을 열어 아이템을 사요 (2개까지 장착). 🚪 건물 문 앞에서 <b>F키</b>: 엘리베이터로 옥상(동전 2개짜리)!<br>
+        🛒 <b>B키</b>로 상점: 스탯 올리기 · 아이템 사기 · ⚒ 강화(확률). 🚪 건물 문 앞에서 <b>F키</b>: 엘리베이터로 옥상(동전 2개짜리)!<br>
         🌳 안전 구역은 한 번에 <b>10초</b>까지만 안전해요.<br>
         ${fbUrl()?'👫 선생님이 <b>시작</b>을 누르면 다 같이 시작해요. 채팅은 바르고 고운 말로!':'🚶 지금은 <b>혼자 연습</b> 모드예요. (선생님이 Firebase를 연결하면 반 친구들과 함께 해요)'}
       </div>
@@ -1428,7 +1452,7 @@ async function startWalk(app, cls, me){
       <div class="wplayers" id="wPlayers"></div>
       <div class="wrank" id="wRank" style="display:none"></div>
       <div class="wchat" id="wChatBox" ${fbUrl()?'':'style="display:none"'}><div class="wlog" id="wLog"></div><input id="wMsg" maxlength="60" placeholder="Enter를 눌러 채팅 (바른 말 고운 말)"></div>
-      <div class="whelp">WASD·방향키 이동 · Shift 달리기 · Space 점프 · <b>E 잡기</b> · <b>F 문·엘리베이터</b> · <b>B 상점</b> · 마우스 드래그 시점 · 휠 확대 · Enter 채팅</div>
+      <div class="whelp">WASD·방향키 이동 · Shift 달리기(⚡체력) · Space 점프 · <b>E 잡기</b> · <b>F 문·엘리베이터</b> · <b>B 상점</b> · 마우스 드래그 시점 · 휠 확대 · Enter 채팅</div>
       <div class="woverlay" id="wOver" style="display:none"></div>
       <div class="wshop" id="wShop" style="display:none"></div>
       <div class="wload" id="wLoad">도시를 불러오는 중…</div>
@@ -1594,7 +1618,11 @@ async function startWalk(app, cls, me){
 
   /* --- 게임 상태 --- */
   const G={state: fbUrl()?'lobby':'play', round: fbUrl()?'':'solo', bg:'day', startAt:0, dur:0, seed:12345, total: fbUrl()?2000:600};
-  const S={k:0, it:[], hu:false, iv:0, cool:0, lastBack:0};
+  const S={k:0, it:[], lv:{}, hu:false, iv:0, cool:0, lastBack:0, st:{sp:0,sta:0,rch:0,def:0}};
+  const lv=k=>S.lv[k]||0;
+  const maxStam=()=>5+S.st.sta; let stam=5, exhausted=false;
+  const reach=()=>1.9+0.15*S.st.rch, coolMs=()=>(3-0.25*S.st.rch)*1000;
+  const speedMul=()=>Math.min(1.35, 1+0.03*S.st.sp+(S.it.includes('shoes')?0.15+0.03*lv('shoes'):0))*(S.it.includes('bag')?0.9+0.02*lv('bag'):1);
   const ST=ANI[me.a]||ANI.cat;
   let onRoof=null, travelling=false, safeIn=0, safeStart=0, outStart=0, mySafe=false;
   const baseY=()=>onRoof?onRoof.h:0;
@@ -1683,8 +1711,9 @@ async function startWalk(app, cls, me){
     const mm=left!=null? `${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,'0')}` : '';
     hudEl.innerHTML = S.hu
       ? `<div class="whud-row"><b>🧑 사람으로 변신 완료!</b> 구경 중이에요 ${left!=null?`· ⏱ ${mm}`:''}</div>`
-      : `<div class="whud-row"><span class="wcoin">🪙 <b>${S.k}</b> / ${GOAL}</span><span class="wbar"><i style="width:${Math.min(100,S.k/GOAL*100)}%"></i></span>${left!=null?`<span>⏱ ${mm}</span>`:''}
-         <span>${S.it.map(i=>ITEMS[i].icon).join(' ')||'<span class="muted" style="color:#ddd">아이템 없음</span>'}</span>${(!onRoof&&inSafe(px,pz))?(mySafe?`<span class="wsafe">🌳 안전 ${Math.max(0,Math.ceil(10-safeIn))}초</span>`:'<span class="wsafe" style="background:#c0392b">⏰ 안전 시간 끝! 녹지 밖에서 5초 쉬면 충전</span>'):''}${onRoof?`<span class="wsafe" style="background:#7a4fd0">🏙️ ${onRoof.floors}층 옥상</span>`:''}${S.iv>performance.now()?'<span class="wsafe">🛡️ 무적</span>':''}</div>`;
+      : `<div class="whud-row"><span class="wcoin">🪙 <b>${S.k}</b> / ${GOAL}</span><span class="wbar"><i style="width:${Math.min(100,S.k/GOAL*100)}%"></i></span>
+         <span title="달리기 체력">⚡</span><span class="wbar wsta"><i class="${exhausted?'ex':''}" style="width:${Math.round(stam/maxStam()*100)}%"></i></span>${left!=null?`<span>⏱ ${mm}</span>`:''}
+         <span>${S.it.map(i=>ITEMS[i].icon+(lv(i)?`<sup>+${lv(i)}</sup>`:'')).join(' ')||'<span class="muted" style="color:#ddd">아이템 없음</span>'}</span>${(!onRoof&&inSafe(px,pz))?(mySafe?`<span class="wsafe">🌳 안전 ${Math.max(0,Math.ceil(10-safeIn))}초</span>`:'<span class="wsafe" style="background:#c0392b">⏰ 안전 시간 끝! 녹지 밖에서 5초 쉬면 충전</span>'):''}${onRoof?`<span class="wsafe" style="background:#7a4fd0">🏙️ ${onRoof.floors}층 옥상</span>`:''}${S.iv>performance.now()?'<span class="wsafe">🛡️ 무적</span>':''}</div>`;
   }
   function renderRanks(){
     if(!ranks.length){ rankEl.style.display='none'; return; }
@@ -1697,14 +1726,26 @@ async function startWalk(app, cls, me){
     if(!show){ shopEl.style.display='none'; stage.focus(); return; }
     if(S.hu){ toast('사람이 되면 상점을 쓸 수 없어요 (구경 중)'); return; }
     shopEl.style.display='';
-    shopEl.innerHTML=`<div class="wover-card" style="max-width:620px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">🛒 상점</b><span>🪙 ${S.k}개 · 장착 ${S.it.length}/${MAX_ITEMS}</span></div>
+    shopEl.innerHTML=`<div class="wover-card" style="max-width:620px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">🛒 상점</b><span>🪙 ${S.k}개 · 아이템 ${S.it.length}/6</span></div>
       <p class="muted" style="margin:4px 0 10px">동전을 쓰면 ${GOAL}개가 늦어져요. 아이템으로 유리하게 할지, 모아서 빨리 변신할지 골라요!</p>
-      <div class="wshop-grid">${Object.entries(ITEMS).map(([k,v])=>{ const own=has(k), can=!own && S.k>=v.cost && S.it.length<MAX_ITEMS;
-        return `<div class="wshop-item ${own?'own':''}"><div style="font-size:26px">${v.icon}</div><b>${v.name}</b><div class="muted" style="min-height:38px">${v.desc}</div>
-          ${own?`<button class="btn" data-drop="${k}">버리기</button>`:`<button class="btn primary" data-buy="${k}" ${can?'':'disabled'}>🪙 ${v.cost}</button>`}</div>`; }).join('')}</div>
+      <div style="text-align:left;font-weight:700;margin:4px 0 6px">📈 스탯 (최대 5레벨 · 잡혀도 유지)</div>
+      <div class="wstat-grid">${Object.entries(STATS).map(([k,v])=>{ const l=S.st[k], c=l<v.max?STAT_COST(l):null, can=c!=null&&S.k>=c;
+        return `<div class="wstat"><div><b>${v.icon} ${v.name}</b> <span class="wlv">${'●'.repeat(l)}${'○'.repeat(v.max-l)}</span></div><div class="muted">지금: ${v.desc(l)}${c!=null?` → 다음: ${v.desc(l+1)}`:''}</div>
+          ${c!=null?`<button class="btn primary" data-stat="${k}" ${can?'':'disabled'}>🪙 ${c}</button>`:'<span class="muted">최대</span>'}</div>`; }).join('')}</div>
+      <div style="text-align:left;font-weight:700;margin:12px 0 6px">🎒 아이템 (모두 살 수 있어요 · ⚒ 강화는 확률! 실패하면 동전만 사라져요)</div>
+      <div class="wshop-grid">${Object.entries(ITEMS).map(([k,v])=>{ const own=has(k), l=lv(k), e=ENH[l];
+        return `<div class="wshop-item ${own?'own':''}"><div style="font-size:26px">${v.icon}${own&&l?`<sup class="wlvup">+${l}</sup>`:''}</div><b>${v.name}</b><div class="muted" style="min-height:38px">${v.eff(l)}</div>
+          ${!own?`<button class="btn primary" data-buy="${k}" ${S.k>=v.cost?'':'disabled'}>🪙 ${v.cost}</button>`
+            : e? `<div class="muted" style="font-size:12px">+${l+1}: ${v.eff(l+1)}</div><button class="btn primary" data-enh="${k}" ${S.k>=e.cost?'':'disabled'}>⚒ +${l+1} 강화 · 🪙 ${e.cost} · ${Math.round(e.p*100)}%</button><button class="btn" data-drop="${k}" style="min-height:28px;padding:2px 8px;font-size:12px">버리기</button>`
+            : `<div class="wlvup" style="font-weight:700">✨ 최고 강화 +5</div><button class="btn" data-drop="${k}" style="min-height:28px;padding:2px 8px;font-size:12px">버리기</button>`}</div>`; }).join('')}</div>
       <div style="text-align:right;margin-top:10px"><button class="btn" id="wShopClose">닫기 (Esc)</button></div></div>`;
-    shopEl.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{ const k=b.dataset.buy, v=ITEMS[k]; if(S.k<v.cost||S.it.length>=MAX_ITEMS||has(k)) return; S.k-=v.cost; S.it=[...S.it,k]; pushMe(); toast(`${v.icon} ${v.name} 장착!`); toggleShop(true); });
-    shopEl.querySelectorAll('[data-drop]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.drop; const r=await dialog({title:'버릴까요?', msg:`${ITEMS[k].name}을(를) 버리면 동전은 돌려받지 못해요.`, buttons:[['취소',false],['버리기',true,'danger']]}); if(r.btn){ S.it=S.it.filter(x=>x!==k); pushMe(); toggleShop(true); } });
+    shopEl.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{ const k=b.dataset.buy, v=ITEMS[k]; if(S.k<v.cost||has(k)) return; S.k-=v.cost; S.it=[...S.it,k]; S.lv={...S.lv,[k]:0}; pushMe(); toast(`${v.icon} ${v.name} 장착!`); toggleShop(true); });
+    shopEl.querySelectorAll('[data-enh]').forEach(b=>b.onclick=()=>{ const k=b.dataset.enh, l=lv(k), e=ENH[l], v=ITEMS[k]; if(!e||!has(k)||S.k<e.cost) return;
+      S.k-=e.cost; const ok=Math.random()<e.p;
+      if(ok){ S.lv={...S.lv,[k]:l+1}; toast(`✨ 강화 성공! ${v.icon} ${v.name} +${l+1}`); } else toast(`💥 강화 실패… (${Math.round(e.p*100)}% 확률이었어요) 동전 ${e.cost}개가 사라졌어요`);
+      pushMe(); toggleShop(true); const card=shopEl.querySelector(`[data-enh="${k}"]`)?.closest('.wshop-item')||shopEl.querySelector(`[data-drop="${k}"]`)?.closest('.wshop-item'); if(card){ card.classList.add(ok?'enh-ok':'enh-fail'); } });
+    shopEl.querySelectorAll('[data-stat]').forEach(b=>b.onclick=()=>{ const k=b.dataset.stat, l=S.st[k], c=STAT_COST(l); if(l>=STATS[k].max||S.k<c) return; S.k-=c; S.st={...S.st,[k]:l+1}; if(k==='sta') stam=maxStam(); pushMe(); toast(`${STATS[k].icon} ${STATS[k].name} ${l+1}레벨!`); toggleShop(true); });
+    shopEl.querySelectorAll('[data-drop]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.drop; const r=await dialog({title:'버릴까요?', msg:`${ITEMS[k].name}을(를) 버리면 동전과 강화는 돌려받지 못해요.`, buttons:[['취소',false],['버리기',true,'danger']]}); if(r.btn){ S.it=S.it.filter(x=>x!==k); const nl={...S.lv}; delete nl[k]; S.lv=nl; pushMe(); toggleShop(true); } });
     $('#wShopClose').onclick=()=>toggleShop(false);
   }
 
@@ -1718,7 +1759,7 @@ async function startWalk(app, cls, me){
   function bubble(av, text){ if(av.bubble){ av.g.remove(av.bubble); } const b=makeLabel(THREE, text.length>22?text.slice(0,22)+'…':text, {bg:'rgba(255,255,255,.97)', h:0.8}); b.position.y=3.6; av.g.add(b); av.bubble=b; av.bubbleT=performance.now()+5000; }
   function addChat(v){ if(!logEl) return; const div=document.createElement('div'); div.innerHTML=`<b style="color:${esc(/^#[0-9a-f]{6}$/i.test(v.c)?v.c:'#9fc3ff')}">${esc(v.n)}</b> ${esc(v.t)}`; logEl.appendChild(div); while(logEl.children.length>30) logEl.firstChild.remove(); logEl.scrollTop=logEl.scrollHeight;
     if(v.p===pid) bubble(meAv, v.t); else if(remotes[v.p]) bubble(remotes[v.p].av, v.t); }
-  function pushMe(){ hud(); if(fb&&myRef) fb.dbM.update(myRef, {k:S.k, it:S.it.join(','), hu:S.hu?1:0, iv:S.iv>performance.now()?1:0}); }
+  function pushMe(){ hud(); if(fb&&myRef) fb.dbM.update(myRef, {k:S.k, it:S.it.map(i=>i+':'+lv(i)).join(','), sl:[S.st.sp,S.st.sta,S.st.rch,S.st.def].join(','), hu:S.hu?1:0, iv:S.iv>performance.now()?1:0}); }
   $('#wMode').textContent = fbUrl()? '함께 걷기 연결 중…' : '혼자 연습 모드';
   if(fbUrl()){
     try{
@@ -1759,13 +1800,13 @@ async function startWalk(app, cls, me){
   if(!fb){ G.startAt=now2(); ensureWaves(); }
   updatePlayers(); hud();
 
-  function resetMe(){ S.k=0; S.it=[]; S.iv=0; if(S.hu){ S.hu=false; swapMyModel(me.a); meTag.position.y=2.75; } pushMe(); }
+  function resetMe(){ S.k=0; S.it=[]; S.lv={}; S.iv=0; S.st={sp:0,sta:0,rch:0,def:0}; stam=5; exhausted=false; if(S.hu){ S.hu=false; swapMyModel(me.a); meTag.position.y=2.75; } pushMe(); }
   function lobbyOverlay(list){
     overlay(`<div style="font-size:22px;font-weight:700;margin-bottom:6px">⏳ 대기실</div>
       <div>선생님이 <b>시작</b>을 누르면 다 같이 시작해요.</div>
       <div class="muted" style="margin:8px 0">배경: ${THEMES[G.bg]?.label||''} ${G.dur?`· 게임 시간 ${G.dur/60}분`:''} · 동전 ${G.coinOpt==='auto'||!G.coinOpt?'자동(인원×80)':G.coinOpt+'개'}</div>
       <div class="wlobby-list"><b>접속 ${list.length}명</b><br>${list.map(n=>esc(n)).join(', ')}</div>
-      <div class="muted" style="margin-top:10px;line-height:1.7">🪙 ${GOAL}개 모으면 사람으로 변신 · 🫣 등 뒤에서 E키로 잡기 · 🌳 공원·숲은 안전 구역 · 🛒 B키 상점</div>`);
+      <div class="muted" style="margin-top:10px;line-height:1.7">🪙 ${GOAL}개 모으면 사람으로 변신 · 🫣 등 뒤에서 E키로 잡기 · 🌳 공원·숲은 10초 안전 · 🛒 B키 상점(스탯·아이템·강화) · 🚪 F키 옥상</div>`);
   }
   function applyGame(g){
     const prevState=G.state, prevRound=G.round;
@@ -1806,7 +1847,7 @@ async function startWalk(app, cls, me){
   }
   // 잡기
   function behindTarget(){
-    let best=null, bd=1.9;
+    let best=null, bd=reach();
     Object.entries(remotes).forEach(([k,rm])=>{ if(!rm.visible||rm.hu||rm.iv||rm.sf) return; const g=rm.av.g, dx=px-g.position.x, dz=pz-g.position.z, dist=Math.hypot(dx,dz);
       if(dist>=bd || Math.abs(g.position.y-(baseY()+py))>1.6) return; const fwd=[Math.sin(g.rotation.y), Math.cos(g.rotation.y)], dot=(fwd[0]*dx+fwd[1]*dz)/(dist||1);
       if(dot<-0.35){ best={k,rm}; bd=dist; } });
@@ -1817,14 +1858,14 @@ async function startWalk(app, cls, me){
     if(mySafe){ toast('🌳 안전 구역 안에서는 잡을 수 없어요'); return; }
     if(performance.now()<S.cool){ toast('잠깐! 다시 잡으려면 조금 기다려요'); return; }
     const t=behindTarget(); if(!t){ toast('친구 등 뒤에 바짝 붙어서 E를 눌러요'); return; }
-    S.cool=performance.now()+3000;
+    S.cool=performance.now()+coolMs();
     fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {ty:'catch', f:pid, fn:me.n, to:t.k, r:G.round, at:now2(), x:+px.toFixed(2), z:+pz.toFixed(2)});
     toast(`🫣 ${t.rm.n} 잡기 시도!`);
   }
   function onCaught(v){
     if(!playing()||S.hu||S.iv>performance.now()||mySafe||travelling) return;
     if(Math.hypot((v.x||0)-px,(v.z||0)-pz)>3.5) return;
-    const amt = has('bag') ? Math.floor(S.k/2) : S.k;
+    const amt = Math.floor(S.k * Math.max(0.1, (1-0.08*S.st.def) * (has('bag')?0.5-0.05*lv('bag'):1)));
     S.k-=amt; S.iv=performance.now()+5000; pushMe(); setTimeout(()=>pushMe(), 5100);
     if(amt>0) fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {ty:'pay', f:pid, fn:me.n, to:v.f, n:amt, r:G.round, at:now2()});
     toast(`😱 ${cleanChat(v.fn).slice(0,8)}에게 잡혔어요! 동전 ${amt}개를 잃었어요 (5초 무적)`);
@@ -1874,13 +1915,15 @@ async function startWalk(app, cls, me){
     const fw=canMove?(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0):0, st2=canMove?(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0):0;
     let mvx=f[0]*fw+rt[0]*st2, mvz=f[1]*fw+rt[1]*st2; const len=Math.hypot(mvx,mvz);
     moving=len>0.01;
-    if(moving){ mvx/=len; mvz/=len; let sp=(4.8+0.5*ST.sp)*(keys.shift?1.75:1); if(has('shoes')) sp*=1.15; if(has('bag')) sp*=0.9; sp*=dt;
+    if(moving){ mvx/=len; mvz/=len; const running=keys.shift && !exhausted && stam>0; if(running){ stam-=dt; if(stam<=0){ stam=0; exhausted=true; } }
+      let sp=(6.2+0.55*ST.sp)*(running?1.6:1)*speedMul(); sp*=dt;
       const nx=Math.max(-BW/2+0.8,Math.min(BW/2-0.8,px+mvx*sp)), nz=Math.max(-BD/2+0.8,Math.min(BD/2-0.8,pz+mvz*sp));
       if(!blocked(nx,pz)) px=nx; if(!blocked(px,nz)) pz=nz;
       const target=Math.atan2(mvx,mvz); let dA=target-face; while(dA>Math.PI) dA-=Math.PI*2; while(dA<-Math.PI) dA+=Math.PI*2; face+=dA*Math.min(1,dt*(6+2.5*ST.tn)); }
-    if(canMove && keys[' '] && py<=0.001){ vy = (5.6+0.5*ST.jp) * (has('jump')?1.4:1); }
+    if(!(moving && keys.shift && !exhausted && stam>0)){ stam=Math.min(maxStam(), stam+maxStam()/5*dt); if(exhausted && stam>=1.5) exhausted=false; }
+    if(canMove && keys[' '] && py<=0.001){ vy = (5.6+0.5*ST.jp) * (has('jump')?1.4+0.05*lv('jump'):1); }
     vy-=18*dt; py=Math.max(0,py+vy*dt); if(py===0) vy=Math.max(0,vy);
-    walkT+= moving? dt*(keys.shift?16:11) : 0;
+    walkT+= moving? dt*(keys.shift&&!exhausted?16:11) : 0;
     meAv.g.position.set(px,baseY()+py,pz); meAv.g.rotation.y=face;
     { const inZone=!onRoof && inSafe(px,pz), nw=performance.now();
       if(inZone){ if(!safeStart) safeStart=nw; outStart=0; safeIn=(nw-safeStart)/1000; } else { if(!outStart) outStart=nw; if(nw-outStart>5000){ safeStart=0; safeIn=0; } }
@@ -1888,7 +1931,7 @@ async function startWalk(app, cls, me){
     meAv.legs.forEach((l,i)=>l.rotation.x= moving? Math.sin(walkT+(i%2?Math.PI:0)+(i>1?Math.PI:0))*0.7 : 0);
     // 동전
     if(playing()){ ensureWaves();
-      if(!S.hu){ const R2=has('magnet')?2.4:1.2;
+      if(!S.hu){ const R2=has('magnet')?1.2*(2+0.2*lv('magnet')):1.2;
         for(const c of coins){ if(c.taken) continue; if(Math.abs(c.x-px)>R2||Math.abs(c.z-pz)>R2) continue; if(Math.hypot(c.x-px,c.z-pz)<R2 && Math.abs(c.y-(baseY()+py+0.8))<1.0) pickup(c); } } }
     if(coins.length){ for(const c of coins){ if(!c.taken && Math.abs(c.x-px)<70 && Math.abs(c.z-pz)<70) placeCoin(c,ts); } coinMesh.instanceMatrix.needsUpdate=true; airMesh.instanceMatrix.needsUpdate=true; }
     if(G.dur>0 && G.state==='play' && now2()>G.startAt+G.dur*1000) endGame();
@@ -1900,7 +1943,7 @@ async function startWalk(app, cls, me){
       let dA=rm.tr-g.rotation.y; while(dA>Math.PI) dA-=Math.PI*2; while(dA<-Math.PI) dA+=Math.PI*2; g.rotation.y+=dA*a;
       rm.walkT+= rm.m? dt*11 : 0; rm.av.legs.forEach((l,i)=>l.rotation.x= rm.m? Math.sin(rm.walkT+(i%2?Math.PI:0)+(i>1?Math.PI:0))*0.7 : 0);
       if(rm.av.bubble && t>rm.av.bubbleT){ g.remove(rm.av.bubble); rm.av.bubble=null; }
-      if(has('alarm') && !rm.hu && !S.hu){ const dx=g.position.x-px, dz=g.position.z-pz, dist=Math.hypot(dx,dz); if(dist<7){ const fwd=[Math.sin(face),Math.cos(face)]; if((fwd[0]*dx+fwd[1]*dz)/(dist||1)<-0.3) warn=true; } } });
+      if(has('alarm') && !rm.hu && !S.hu){ const dx=g.position.x-px, dz=g.position.z-pz, dist=Math.hypot(dx,dz); if(dist<7+1.5*lv('alarm')){ const fwd=[Math.sin(face),Math.cos(face)]; if((fwd[0]*dx+fwd[1]*dz)/(dist||1)<-0.3) warn=true; } } });
     if(meAv.bubble && t>meAv.bubbleT){ meAv.g.remove(meAv.bubble); meAv.bubble=null; }
     const tgt = fb&&playing()&&!S.hu ? behindTarget() : null;
     const nearDoor = !travelling && (onRoof ? (Math.hypot(px-onRoof.hx,pz-onRoof.hz)<3.4 ? onRoof : null) : roofs.find(r=>Math.hypot(px-r.door.x,pz-r.door.z)<2.6));
@@ -1919,11 +1962,11 @@ async function startWalk(app, cls, me){
     renderer.render(scene,camera);
     // 미니맵 (레이더가 있어야 친구가 보여요)
     mx.drawImage(miniBase,0,0);
-    if(has('radar')||S.hu) Object.values(remotes).forEach(rm=>{ if(!rm.visible) return; const g=rm.av.g; if(!S.hu && Math.hypot(g.position.x-px,g.position.z-pz)>60) return; const [a,b]=toP(g.position.x,g.position.z); mx.fillStyle=rm.hu?'#f2c94c':'#2f6fd6'; mx.beginPath(); mx.arc(a/5,b/5,3.5,0,Math.PI*2); mx.fill(); });
+    if(has('radar')||S.hu) Object.values(remotes).forEach(rm=>{ if(!rm.visible) return; const g=rm.av.g; if(!S.hu && Math.hypot(g.position.x-px,g.position.z-pz)>60+20*lv('radar')) return; const [a,b]=toP(g.position.x,g.position.z); mx.fillStyle=rm.hu?'#f2c94c':'#2f6fd6'; mx.beginPath(); mx.arc(a/5,b/5,3.5,0,Math.PI*2); mx.fill(); });
     roofs.forEach(r=>{ const [a,b]=toP(r.door.x,r.door.z); mx.fillStyle='#f2c94c'; mx.fillRect(a/5-1.5,b/5-1.5,3,3); });
     const [ma,mb]=toP(px,pz); mx.save(); mx.translate(ma/5,mb/5); mx.rotate(-face); mx.fillStyle='#d64545'; mx.beginPath(); mx.moveTo(0,6); mx.lineTo(-4,-4); mx.lineTo(4,-4); mx.closePath(); mx.fill(); mx.restore();
     showInfo(findInfo());
-    if(t-hudT>250){ hudT=t; hud(); }
+    if(t-hudT>120){ hudT=t; hud(); }
     send(t);
     raf=requestAnimationFrame(loop);
   }
@@ -1998,7 +2041,7 @@ async function teacherPage(app, cls){
     $('#tState').innerHTML=`지금 상태: <b>${st}</b>${game.state==='play'&&game.total?` · 동전 총 ${game.total}개`:''}${left!=null?` · 남은 시간 ${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,'0')}`:''}`;
     const list=Object.values(players).filter(Boolean).sort((a,b)=>(b.hu-a.hu)||((+b.k||0)-(+a.k||0)));
     $('#tCount').textContent=`(${list.length}명)`;
-    $('#tPlayers').innerHTML= list.length? `<table class="tbl"><tr><th>이름</th><th>동전</th><th>아이템</th><th>상태</th></tr>${list.map(p=>`<tr><td>${esc(cleanChat(p.n).slice(0,8))}</td><td>${+p.k||0}</td><td>${String(p.it||'').split(',').filter(Boolean).map(i=>ITEMS[i]?.icon||'').join(' ')}</td><td>${p.hu?'🧑 변신':'🐾'}</td></tr>`).join('')}</table>` : '아직 없어요';
+    $('#tPlayers').innerHTML= list.length? `<table class="tbl"><tr><th>이름</th><th>동전</th><th>스탯 🏃⚡🫣🛡️</th><th>아이템</th><th>상태</th></tr>${list.map(p=>`<tr><td>${esc(cleanChat(p.n).slice(0,8))}</td><td>${+p.k||0}</td><td>${String(p.sl||'0,0,0,0').split(',').map(x=>+x||0).join(' · ')}</td><td>${String(p.it||'').split(',').filter(Boolean).map(x=>{ const [i,l]=x.split(':'); return (ITEMS[i]?.icon||'')+(+l?`+${+l}`:''); }).join(' ')}</td><td>${p.hu?'🧑 변신':'🐾'}</td></tr>`).join('')}</table>` : '아직 없어요';
     const rl=Object.values(ranks).sort((a,b)=>a.t-b.t);
     $('#tRanks').innerHTML= rl.length? rl.map((r,i)=>`${i+1}. ${esc(cleanChat(r.n).slice(0,8))}`).join('<br>') : '아직 없어요';
   };
