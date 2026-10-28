@@ -137,6 +137,15 @@ table.sum th{background:#e8edf6}
 .wbar i{display:block;height:100%;background:#ffd84d}
 .wsafe{background:#2e9e5b;border-radius:999px;padding:1px 8px;font-size:13px}
 .wwarn{position:absolute;left:50%;top:56px;transform:translateX(-50%);z-index:4;background:rgba(214,69,69,.92);color:#fff;border-radius:10px;padding:6px 14px;font-size:15px}
+.wfeed{position:absolute;left:10px;top:50%;transform:translateY(-70%);z-index:3;display:flex;flex-direction:column;gap:4px;pointer-events:none;max-width:min(360px,55%)}
+.wfeed-i{background:rgba(20,30,55,.78);color:#fff;border-radius:999px;padding:4px 12px;font-size:13px;animation:feedin .35s;transition:opacity .6s}
+.wfeed-i b{color:#ffd84d}
+.wfeed-i.out{opacity:0}
+.wfeed-i.t{background:rgba(214,69,69,.9)}
+@keyframes feedin{from{transform:translateX(-30px);opacity:0}to{transform:none;opacity:1}}
+.wnotice{position:absolute;left:50%;top:92px;transform:translateX(-50%);z-index:8;background:linear-gradient(#ffe27a,#ffc93c);color:#3b2a00;border:3px solid #fff;border-radius:14px;padding:10px 22px;font-size:20px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.3);text-align:center;max-width:90%;animation:noticein .5s}
+.wnotice small{display:block;font-size:12px;font-weight:600;opacity:.75}
+@keyframes noticein{0%{transform:translateX(-50%) scale(.6);opacity:0}60%{transform:translateX(-50%) scale(1.08);opacity:1}100%{transform:translateX(-50%) scale(1)}}
 .wrank{position:absolute;right:10px;top:300px;width:210px;background:rgba(255,248,220,.95);border-radius:8px;padding:6px 10px;font-size:13px;z-index:3;max-height:220px;overflow:auto;line-height:1.6}
 .woverlay,.wshop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,25,50,.45);z-index:6;padding:16px}
 .wover-card{background:#fff;border-radius:14px;padding:20px 24px;max-width:520px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.25);max-height:90%;overflow:auto}
@@ -148,6 +157,10 @@ table.sum th{background:#e8edf6}
 .wshop-item.own{border-color:var(--ok);background:#eefaf1}
 .tbg{display:flex;flex-wrap:wrap;gap:8px}
 .wsta{width:60px}
+.wflash{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:5}
+.wspeed{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:2;
+  background:repeating-conic-gradient(from 0deg at 50% 55%, rgba(255,255,255,0) 0deg 5deg, rgba(255,255,255,.7) 5deg 5.5deg);
+  -webkit-mask:radial-gradient(circle at 50% 55%, transparent 30%, #000 75%); mask:radial-gradient(circle at 50% 55%, transparent 30%, #000 75%)}
 .wsta i{background:#7fd3ff}
 .wsta i.ex{background:#ff7a7a}
 .wstat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;text-align:left}
@@ -240,6 +253,32 @@ const SHAPE_NAME = Object.fromEntries(SHAPES);
 const SEG_SHAPES = [['box','상자'],['cyl','원기둥'],['pyr','피라미드 (꼭대기만)'],['dome','돔 (꼭대기만)'],['spire','첨탑 (꼭대기만)']];
 const SEG_SCALES = [[1,'100%'],[0.85,'85%'],[0.7,'70%'],[0.55,'55%'],[0.4,'40%'],[0.25,'25%']];
 const TOP_ONLY = ['pyr','dome','spire'];
+// 창문: 스타일 × 크기 → 벽 면적 중 창 비율
+const WINS = [['grid','▦ 격자창 (집·아파트)'],['band','▬ 띠창 (학교·사무실)'],['glass','▮ 통유리 (상가·높은 빌딩)'],['round','● 둥근 창 (랜드마크)'],['none','없음 (창고·공장)']];
+const WIN_NAME = {grid:'격자창', band:'띠창', glass:'통유리', round:'둥근 창', none:'창 없음'};
+const WSIZES = [['s','작게'],['m','보통'],['l','크게']];
+const WS_NAME = {s:'작게', m:'보통', l:'크게'};
+const WIN_FR = {grid:{s:.12,m:.22,l:.32}, band:{s:.18,m:.28,l:.38}, glass:{s:.45,m:.6,l:.75}, round:{s:.08,m:.14,l:.2}, none:{s:0,m:0,l:0}};
+const DAYLIGHT_MIN = 10;   // 건축물의 설비기준 등에 관한 규칙 제17조: 거실 채광 창 면적 ≥ 바닥면적의 1/10
+const winOf = b => [WIN_FR[b?.win]?b.win:'grid', ['s','m','l'].includes(b?.ws)?b.ws:'m'];
+// 가로 4m × 세로 3m(한 층) 칸 안의 창 모양 (단위 m, v는 바닥에서 위로)
+function winShapes(style, size){
+  const fr=WIN_FR[style]?.[size]||0; if(!fr) return [];
+  if(style==='grid'){ const wh=3*(0.35+fr), ww=fr*12/wh, vc=Math.min(1.6, 2.85-wh/2); return [{t:'r',u0:2-ww/2,u1:2+ww/2,v0:vc-wh/2,v1:vc+wh/2}]; }
+  if(style==='band'){ const wh=3*fr; return [{t:'r',u0:0,u1:4,v0:1.55-wh/2,v1:1.55+wh/2}]; }
+  if(style==='glass'){ const wh=2.76, ww=fr*12/wh; return [{t:'r',u0:2-ww/2,u1:2+ww/2,v0:1.5-wh/2,v1:1.5+wh/2}]; }
+  if(style==='round'){ const d=Math.sqrt(fr*48/Math.PI); return [{t:'c',u:2,v:1.6,d}]; }
+  return [];
+}
+// 채광: 한 층 전체를 하나의 거실로 보고 단순 계산 (창 면적 ÷ 바닥 면적)
+function daylight(b){
+  const [w,sz]=winOf(b), fr=WIN_FR[w][sz], r=rectOf(b), base=b.segs&&b.segs.length?b.segs[0]:{shape:b.shape||'box',scale:1};
+  if(base.shape==='pyr') return null;
+  const wm=r.w/PX_PER_M*(base.scale||1), dm=r.h/PX_PER_M*(base.scale||1), round=base.shape==='cyl'||base.shape==='dome';
+  const per=round? Math.PI*(wm+dm)/2 : 2*(wm+dm), area=round? Math.PI*wm*dm/4 : wm*dm, winA=per*FLOOR_M*fr;
+  return {pct:area?winA/area*100:0, winA, area, style:w, size:sz};
+}
+const dayText = d => d ? `☀️ 채광 ${r1(d.pct)}% (한 층 창 ${fmtN(d.winA)}㎡ ÷ 바닥 ${fmtN(d.area)}㎡ · 기준 ${DAYLIGHT_MIN}% 이상)` : '';
 const segArea = (b, sg) => { const a=areaM2(b)*sg.scale*sg.scale; return (sg.shape==='cyl'||sg.shape==='dome')? a*Math.PI/4 : a; };
 const bArea = b => { if(b.segs&&b.segs.length) return segArea(b,b.segs[0]); const a=areaM2(b); return (b.shape==='cyl'||b.shape==='dome')? a*Math.PI/4 : a; };
 const bGFA = b => b.segs&&b.segs.length ? b.segs.reduce((t,sg)=>t+segArea(b,sg)*sg.floors,0) : bArea(b)*(b.floors||1);
@@ -493,7 +532,7 @@ function render3D(cv, layers, view){
     else { const hw=r.w/2*sc, hh=r.h/2*sc; out.push([cx-hw,cy-hh,z],[cx+hw,cy-hh,z],[cx+hw,cy+hh,z],[cx-hw,cy+hh,z]); }
     return out; };
   const prism=(r,sc,z0,z1,seg,nf)=>{ const lo=ring(r,sc,z0,seg), hi=ring(r,sc,z1,seg), f=[];
-    for(let i=0;i<lo.length;i++){ const j=(i+1)%lo.length; f.push({v:[lo[i],lo[j],hi[j],hi[i]], fl:nf>1?{A:lo[i],B:lo[j],z0,n:nf}:null, soft:!!seg}); }
+    for(let i=0;i<lo.length;i++){ const j=(i+1)%lo.length; f.push({v:[lo[i],lo[j],hi[j],hi[i]], fl:nf>=1?{A:lo[i],B:lo[j],z0,n:nf}:null, soft:!!seg}); }
     f.push({v:hi, top:true}); return f; };
   const pyramid=(r,sc,z0,z1)=>{ const lo=ring(r,sc,z0), ap=[r.x+r.w/2, r.y+r.h/2, z1], f=[]; for(let i=0;i<4;i++) f.push({v:[lo[i],lo[(i+1)%4],ap]}); return f; };
   const domeF=(r,z0,hg)=>{ const f=[], seg=16, rings=4;
@@ -523,7 +562,7 @@ function render3D(cv, layers, view){
       case 'spire': { const sh=Ht*.4; return [{f:prism(r,1,0,Ht,0,n),c:[cx,cy,Ht/2]},{f:pyramid(r,.9,Ht,Ht+sh),c:[cx,cy,Ht+sh/4]}]; }
       default: return [{f:prism(r,1,0,Ht,0,n), c:[cx,cy,Ht/2]}];
     } };
-  const drawFace=(fc, c, col, tall)=>{
+  const drawFace=(fc, c, col, tall, wb)=>{
     const v=fc.v.map(R3), cc=R3(c);
     const u=[v[1][0]-v[0][0],v[1][1]-v[0][1],v[1][2]-v[0][2]], w=[v[2][0]-v[0][0],v[2][1]-v[0][1],v[2][2]-v[0][2]];
     let nn=[u[1]*w[2]-u[2]*w[1], u[2]*w[0]-u[0]*w[2], u[0]*w[1]-u[1]*w[0]]; const len=Math.hypot(...nn)||1; nn=nn.map(x=>x/len);
@@ -537,6 +576,18 @@ function render3D(cv, layers, view){
     if(fc.fl && tall){ for(let q=30; q*FH < fc.fl.z0+fc.fl.n*FH; q+=30){ const z=q*FH; if(z<fc.fl.z0) continue;
         const A=fc.fl.A, B=fc.fl.B, pts=[P(A[0],A[1],z),P(B[0],B[1],z),P(B[0],B[1],z+FH),P(A[0],A[1],z+FH)];
         ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath(); ctx.fillStyle='#f2c94c'; ctx.fill(); } }
+    if(fc.fl && wb){ const [ws,wz]=winOf(wb), shp=winShapes(ws,wz), A=fc.fl.A, B=fc.fl.B, Lm=Math.hypot(B[0]-A[0],B[1]-A[1])/PX_PER_M;
+      const hp=Math.abs(P(A[0],A[1],FH)[1]-P(A[0],A[1],0)[1]);
+      if(shp.length && Lm>0.5 && hp>=3){ const n=Math.max(1,Math.round(Lm/4)), cw=Lm/n, wc=shade('#9ec4e8', Math.max(-.5,Math.min(.25,lum)));
+        const Q=(um,vm,z0)=>{ const t=um/Lm; return P(A[0]+(B[0]-A[0])*t, A[1]+(B[1]-A[1])*t, z0+vm*ZPX); };
+        ctx.fillStyle=wc;
+        for(let fI=0; fI<fc.fl.n; fI++){ const zf=fc.fl.z0+fI*FH;
+          if(tall && fI>0 && fI%30===0) continue;
+          for(let ci=0; ci<n; ci++){ const u0=ci*cw, sc=cw/4;
+            shp.forEach(w=>{ ctx.beginPath();
+              if(w.t==='r'){ [[w.u0,w.v0],[w.u1,w.v0],[w.u1,w.v1],[w.u0,w.v1]].forEach(([u,v],i)=>{ const q=Q(u0+u*sc,v,zf); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); }
+              else { const rr=w.d/2; for(let a=0;a<10;a++){ const an=a/10*Math.PI*2, q=Q(u0+(w.u+Math.cos(an)*rr)*sc, w.v+Math.sin(an)*rr, zf); a?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); } }
+              ctx.closePath(); ctx.fill(); }); } } } }
     if(fc.fl){ ctx.strokeStyle='rgba(255,255,255,.42)'; ctx.lineWidth=1;
       for(let i=1;i<fc.fl.n;i++){ const z=fc.fl.z0+i*FH; const s1=P(fc.fl.A[0],fc.fl.A[1],z), s2=P(fc.fl.B[0],fc.fl.B[1],z); ctx.beginPath(); ctx.moveTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.stroke(); } }
   };
@@ -550,7 +601,7 @@ function render3D(cv, layers, view){
     if(o.t==='t'){ drawTree(o); ctx.restore(); return; }
     nB++; const {b,r,color}=o;
     const tall=isSuperTall(b);
-    pieces(b,r).forEach(pc=>pc.f.forEach(fc=>drawFace(fc,pc.c,pc.col||color,tall)));
+    pieces(b,r).forEach(pc=>pc.f.forEach(fc=>drawFace(fc,pc.c,pc.col||color,tall,b)));
     const topZ=bHeight(b)*ZPX, tc=P(r.x+r.w/2, r.y+r.h/2, topZ);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if((o.names && b.name) || tall){ const lb=`${b.name||''}${tall?(b.name?' · ':'')+'초고층':''}`; ctx.font="700 15px 'Noto Sans KR', sans-serif"; const tw=ctx.measureText(lb).width+12;
@@ -919,15 +970,18 @@ async function teamPage(app, cls, tid){
   async function askFloors(cand, info, current){
     const lm=tid==='landmark';
     let val=current||1, shape=cand.shape||'box', color=cand.color||T.color, name=cand.name||'';
+    let win=cand.win||(tid==='commerce'||tid==='landmark'?'glass':'grid'), ws=cand.ws||'m';
     while(true){
       const inputs=[{k:'floors',label:'층수',type:'number',value:val},{k:'name',label:'건물 이름 (선택, 예: 우리 집, 시청)',value:name}];
       if(lm) inputs.push({k:'shape',label:'모양',type:'select',value:shape,options:SHAPES},{k:'color',label:'색',type:'color',value:color});
+      inputs.push({k:'win',label:'🪟 창문 모양',type:'select',value:win,options:WINS},{k:'ws',label:'🪟 창 크기',type:'select',value:ws,options:WSIZES});
       const r=await dialog({title: lm?'🏛️ 랜드마크 짓기':'🏢 몇 층으로 지을까요?',
         msg:`바닥 ${fmtN(info.fa)}㎡ · 대지${info.si+1}\n이 자리에 지을 수 있는 최대 층수(상자 모양): ${info.maxF>=1?info.maxF+'층':'없음'}${lm?'\n원기둥·돔은 바닥이 둥글어 면적이 작아지고, 돔·첨탑은 지붕만큼 더 높아져요.':''}`,
         inputs, buttons:[['취소',null],['짓기','ok','primary']]});
       if(r.btn!=='ok') return null;
       const fl=Math.floor(num(r.values.floors)||0); name=(r.values.name||'').trim().slice(0,12);
       if(lm){ shape=r.values.shape||'box'; color=r.values.color||T.color; }
+      win=r.values.win||win; ws=r.values.ws||ws;
       if(fl<1){ await dialog({title:'층수를 확인해요', bad:true, msg:'1층 이상으로 입력해요.'}); val=1; continue; }
       const test={...cand, floors:fl, shape: lm?shape:undefined};
       const fa=bArea(test), gfa=info.gfaOther+fa*fl, far=gfa/info.sArea*100;
@@ -942,14 +996,14 @@ async function teamPage(app, cls, tid){
         await dialog({title:'⚠️ 높이 제한 초과! 지을 수 없어요', bad:true, msg:`${fl}층${lm&&shape!=='box'?' '+SHAPE_NAME[shape]:''}이면 높이 약 ${hgt}m예요. 고도지구 제한은 ${info.hl}m라서\n${ok>=1?`이 모양으로는 ${ok}층까지 지을 수 있어요.`:'이 모양으로는 지을 수 없어요.'}`});
         val=Math.max(1,ok); continue;
       }
-      const out={floors:fl, name}; if(lm){ out.shape=shape; out.color=color; } return out;
+      const out={floors:fl, name, win, ws}; if(lm){ out.shape=shape; out.color=color; } return out;
     }
   }
   /* --- 랜드마크 층 쌓기 --- */
   function stackEditor(cand, info){
     return new Promise(resolve=>{
       const base=cand.segs? JSON.parse(JSON.stringify(cand.segs)) : [{floors:Math.min(10,Math.max(1,info.maxF||1)),shape:'box',scale:1,color:cand.color||T.color},{floors:5,shape:'cyl',scale:0.7,color:'#f2c94c'}];
-      const segs=base; let name=cand.name||'';
+      const segs=base; let name=cand.name||'', win=cand.win||'glass', ws=cand.ws||'m';
       const m=document.createElement('div'); m.className='modal';
       m.innerHTML=`<div class="card wide"><div class="title">🏗️ 층 쌓기 — 1층부터 위로 구간을 쌓아요</div>
         <div class="muted">바닥 ${fmtN(info.fa)}㎡ · 대지${info.si+1} · 용적률 상한 ${info.capF}%${info.hl!=null?` · 고도 제한 ${info.hl}m`:''}${isSpecial(st.fields)?' · 특별건축구역(높이 완화)':''}</div>
@@ -959,6 +1013,8 @@ async function teamPage(app, cls, tid){
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn" id="segAdd">＋ 위에 구간 추가</button></div>
             <label style="display:block;font-size:13px;color:var(--sub);margin:10px 0 4px">건물 이름</label>
             <input id="segName" style="width:100%;font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px" placeholder="예) 남지타워">
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><label style="font-size:13px;color:var(--sub)">🪟 창문 <select id="segWin">${WINS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+              <label style="font-size:13px;color:var(--sub)">크기 <select id="segWs">${WSIZES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div>
           </div>
           <div><canvas id="segPrev" width="230" height="330" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#f7f9fc"></canvas><div class="muted" style="text-align:center">정면도 (앞에서 본 모습)</div></div>
         </div>
@@ -966,6 +1022,7 @@ async function teamPage(app, cls, tid){
         <div class="acts"><button class="btn" id="segCancel">취소</button><button class="btn primary" id="segOk">짓기</button></div></div>`;
       document.body.appendChild(m);
       $('#segName',m).value=name; $('#segName',m).oninput=e=>name=e.target.value;
+      $('#segWin',m).value=win; $('#segWin',m).onchange=e=>win=e.target.value; $('#segWs',m).value=ws; $('#segWs',m).onchange=e=>ws=e.target.value;
       const close=v=>{ m.remove(); resolve(v); };
       $('#segCancel',m).onclick=()=>close(null);
       $('#segAdd',m).onclick=()=>{ if(segs.length>=8){ toast('구간은 8개까지예요'); return; } const last=segs[segs.length-1];
@@ -1019,13 +1076,20 @@ async function teamPage(app, cls, tid){
         $('#segOk',m).disabled=!!c.probs.length; drawPrev(c);
       }
       $('#segOk',m).onclick=()=>{ const c=check(); if(c.probs.length) return;
-        close({segs:segs.map(sg=>({...sg})), floors:c.test.floors, name:(name||'').trim().slice(0,12), shape:segs[0].shape==='cyl'?'cyl':'box', color:segs[0].color}); };
+        close({segs:segs.map(sg=>({...sg})), floors:c.test.floors, name:(name||'').trim().slice(0,12), shape:segs[0].shape==='cyl'?'cyl':'box', color:segs[0].color, win, ws}); };
       draw();
     });
   }
   async function superTallNotice(b){
     const n=b.floors, refuge=Math.floor((n-1)/30);
     await dialog({title:'🏙️ 초고층 건축물이에요!', msg:`${n}층 · 높이 약 ${bHeight(b)}m → 50층 이상 또는 200m 이상이라 초고층이에요.\n\n「초고층 및 지하연계 복합건축물 재난관리에 관한 특별법」에 따라\n• 짓기 전 사전재난영향성평가를 받아야 해요\n• 피난안전구역을 최대 30개 층마다 만들어요 (이 건물은 ${Math.max(1,refuge)}곳 이상)\n• 총괄재난관리자와 종합방재실을 둬야 해요\n\n입체 보기에서 노란 띠가 피난안전구역이에요.`});
+  }
+  async function daylightNotice(b){
+    const d=daylight(b); if(!d) return;
+    if(tid!=='housing'){ toast(`🪟 ${WIN_NAME[d.style]} · ${dayText(d).replace(' · 기준 10% 이상','')}`); return; }
+    if(d.pct>=DAYLIGHT_MIN){ toast(`☀️ 채광 OK! ${r1(d.pct)}% (기준 ${DAYLIGHT_MIN}% 이상)`); return; }
+    const tips=[]; if(d.size!=='l') tips.push('창 크기를 "크게"로 바꾸기'); if(!['glass','band'].includes(d.style)) tips.push('띠창이나 통유리로 바꾸기'); tips.push('건물을 얇고 길게 그리기 (벽이 길어져 창이 많아져요)');
+    await dialog({title:'☀️ 채광 확인 — 햇빛이 부족해요', msg:`${d.style==='none'?'창이 없는 집이에요! 사람이 사는 집에는 창이 꼭 필요해요.\n\n':''}${dayText(d)}\n\n집(거실)은 창 면적이 바닥 면적의 1/10(10%) 이상이어야 햇빛이 충분히 들어와요.\n(건축물의 설비기준 등에 관한 규칙 제17조 · 여기서는 한 층 전체로 단순 계산)\n\n고치는 방법:\n• ${tips.join('\n• ')}\n\n건물은 그대로 지어졌어요. 6단계 확인표에 ❌로 표시돼요.`});
   }
   async function addBldg(cand){
     const info=checkBldg(cand);
@@ -1042,6 +1106,7 @@ async function teamPage(app, cls, tid){
     commit(()=>st.bldgs.push(nb));
     if(isSuperTall(nb)) await superTallNotice(nb);
     toast(`${r.floors}층 건물을 지었어요!`);
+    await daylightNotice(nb);
   }
   async function editAt(p){
     const b=[...st.bldgs].reverse().find(b=>hit(b,p));
@@ -1050,13 +1115,15 @@ async function teamPage(app, cls, tid){
       if(info.err && !info.fatal){ await dialog({title:'⚠️ 확인해요', bad:true, msg:info.err}); }
       const btns=[['닫기',null],['삭제','del','danger']];
       if(tid==='landmark'){ if(!b.segs) btns.push(['한 모양 고치기','edit']); btns.push([b.segs?'층 쌓기 고치기':'층 쌓기로 바꾸기','stack','primary']); }
-      else btns.push(['층수·이름 바꾸기','edit','primary']);
-      const r=await dialog({title:`🏢 ${b.name||'건물'} · ${b.floors}층${b.segs?` · 층 쌓기 ${b.segs.length}단`:b.shape&&b.shape!=='box'?' · '+SHAPE_NAME[b.shape]:''}`, msg:`바닥 넓이 ${fmtN(bArea(b))}㎡ · 연면적 ${fmtN(bGFA(b))}㎡ · 높이 약 ${bHeight(b)}m`, buttons:btns});
+      else btns.push(['층수·이름·창문 바꾸기','edit','primary']);
+      const dl=daylight(b), [bw0,bs0]=winOf(b);
+      const r=await dialog({title:`🏢 ${b.name||'건물'} · ${b.floors}층${b.segs?` · 층 쌓기 ${b.segs.length}단`:b.shape&&b.shape!=='box'?' · '+SHAPE_NAME[b.shape]:''}`, msg:`바닥 넓이 ${fmtN(bArea(b))}㎡ · 연면적 ${fmtN(bGFA(b))}㎡ · 높이 약 ${bHeight(b)}m\n🪟 ${WIN_NAME[bw0]}${bw0!=='none'?' · '+WS_NAME[bs0]:''}${dl?`\n${dayText(dl)}${tid==='housing'?(dl.pct>=DAYLIGHT_MIN?' ✅':' ❌'):''}`:''}`, buttons:btns});
       if(r.btn==='stack'){
         if(info.err){ await dialog({title:'⚠️ 바꿀 수 없어요', bad:true, msg:info.err+'\n\n건물을 지우고 다시 지어요.'}); return; }
         const n=await stackEditor(b, info); if(!n) return;
         commit(()=>{ const x=st.bldgs.find(x=>x.id===b.id); Object.assign(x, n); });
         const x2=st.bldgs.find(x=>x.id===b.id); if(x2&&isSuperTall(x2)) await superTallNotice(x2);
+        if(x2) await daylightNotice(x2);
         return;
       }
       if(r.btn==='del') commit(()=>{ st.bldgs=st.bldgs.filter(x=>x.id!==b.id); });
@@ -1065,6 +1132,7 @@ async function teamPage(app, cls, tid){
         const n=await askFloors(b, info, b.floors); if(!n) return;
         commit(()=>{ const x=st.bldgs.find(x=>x.id===b.id); Object.assign(x, n); delete x.segs; });
         const x2=st.bldgs.find(x=>x.id===b.id); if(x2&&isSuperTall(x2)) await superTallNotice(x2);
+        if(x2) await daylightNotice(x2);
       }
       return;
     }
@@ -1249,6 +1317,9 @@ async function overlayPage(app, cls){
     const clash=[]; for(let i=0;i<all.length;i++) for(let j=i+1;j<all.length;j++) if(all[i].t.id!==all[j].t.id && overlaps(all[i].b,all[j].b)) clash.push(`${all[i].t.name}–${all[j].t.name}`);
     const tall=all.filter(x=>isSuperTall(x.b));
     ck.push(tall.length? `🏙️ 초고층 — ${tall.map(x=>`${x.t.name} ${x.b.name||''} ${x.b.floors}층`).join(', ')}: 초고층 재난관리 특별법에 따라 피난안전구역(최대 30개 층마다)·종합방재실이 필요해요.` : '― 초고층 — 50층 이상 또는 200m 이상 건물이 없어요.');
+    const hs=(data('housing').bldgs||[]).map((b,i)=>({b,i,d:daylight(b)})).filter(x=>x.d);
+    const dark=hs.filter(x=>x.d.pct<DAYLIGHT_MIN);
+    ck.push(!hs.length? '― 채광(주거) — 아직 주거조 건물이 없어요.' : dark.length? `❌ 채광(주거) — 햇빛이 부족한 집: ${dark.map(x=>`${x.b.name||'건물'+(x.i+1)} ${r1(x.d.pct)}%`).join(', ')} (창 면적이 바닥의 ${DAYLIGHT_MIN}% 이상이어야 해요 → 창을 크게 · 건물을 얇게)` : `✅ 채광(주거) — 모든 집이 창 면적 ${DAYLIGHT_MIN}% 이상이에요. (가장 낮은 집 ${r1(Math.min(...hs.map(x=>x.d.pct)))}%)`);
     ck.push(clash.length? `❌ 건물 겹침 — 다른 조 건물끼리 겹쳐요: ${[...new Set(clash)].join(', ')}` : '✅ 건물 겹침 — 조끼리 겹치는 건물이 없어요.');
     if(!roadsAll.length) ck.push('― 도로 — 교통·도로조가 아직 도로를 그리지 않았어요.');
     else {
@@ -1322,7 +1393,7 @@ const ENH = [{cost:5,p:0.9},{cost:8,p:0.75},{cost:12,p:0.6},{cost:16,p:0.45},{co
 const STATS = {
   sp:  {icon:'🏃', name:'속도', desc:l=>`이동 +${l*3}%`, max:5},
   sta: {icon:'⚡', name:'체력', desc:l=>`달리기 ${5+l}초`, max:5},
-  rch: {icon:'🫣', name:'손길', desc:l=>`잡기 거리 ${(1.9+0.15*l).toFixed(2)}m · 대기 ${(3-0.25*l).toFixed(2)}초`, max:5},
+  rch: {icon:'🫣', name:'손길', desc:l=>`잡기 거리 ${(2.6+0.2*l).toFixed(1)}m · 대기 ${(3-0.25*l).toFixed(2)}초`, max:5},
   def: {icon:'🛡️', name:'방어', desc:l=>`잡혔을 때 ${l*8}% 덜 잃음`, max:5},
 };
 const STAT_COST = l => 3 + 2*l;   // 0→1: 3, 1→2: 5, … 4→5: 11
@@ -1340,6 +1411,27 @@ async function loadFirebase(name){
   const appM=await import(FB_APP_URL), dbM=await import(FB_DB_URL);
   const fapp=appM.initializeApp({databaseURL:fbUrl()}, name); const db=dbM.getDatabase(fapp);
   return {appM, dbM, fapp, db};
+}
+
+let actx=null;
+const sfxOn=()=>ls.get('walkSfx')!==false;
+function sfx(kind){
+  if(!sfxOn()) return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const t=actx.currentTime;
+    const tone=(f1,f2,dur,type='sine',vol=0.12,delay=0)=>{ const o=actx.createOscillator(), g=actx.createGain(); o.type=type;
+      o.frequency.setValueAtTime(f1,t+delay); o.frequency.exponentialRampToValueAtTime(Math.max(30,f2),t+delay+dur);
+      g.gain.setValueAtTime(vol,t+delay); g.gain.exponentialRampToValueAtTime(0.001,t+delay+dur); o.connect(g).connect(actx.destination); o.start(t+delay); o.stop(t+delay+dur+0.03); };
+    if(kind==='coin'){ tone(1250,1800,0.07,'square',0.035); tone(1800,2500,0.09,'square',0.03,0.05); }
+    if(kind==='swipe'){ tone(700,180,0.14,'triangle',0.09); }
+    if(kind==='got'){ [0,0.06,0.12,0.18,0.24].forEach((d,i)=>tone(700+i*180,900+i*180,0.08,'square',0.05,d)); }
+    if(kind==='caught'){ tone(420,70,0.5,'sawtooth',0.13); tone(160,60,0.4,'square',0.08,0.05); }
+    if(kind==='ok'){ tone(600,1200,0.18,'triangle',0.1); tone(1200,1700,0.22,'triangle',0.08,0.14); }
+    if(kind==='fail'){ tone(320,110,0.32,'square',0.07); }
+    if(kind==='notice'){ tone(880,880,0.14,'triangle',0.1); tone(660,660,0.14,'triangle',0.1,0.16); tone(990,990,0.22,'triangle',0.1,0.32); }
+    if(kind==='feed'){ tone(1000,1300,0.06,'sine',0.04); }
+    if(kind==='huff'){ tone(300,200,0.18,'sine',0.05); tone(280,190,0.18,'sine',0.05,0.25); }
+  }catch(e){}
 }
 
 async function walkPage(app, cls){
@@ -1445,19 +1537,21 @@ function makeAnimal(THREE, kind, color){
 
 async function startWalk(app, cls, me){
   app.innerHTML=`<div class="wstage" id="wStage" tabindex="0">
+      <div class="wspeed" id="wSpeed"></div><div class="wflash" id="wFlash"></div>
       <div class="whud" id="wHud"></div>
       <div class="winfo" id="wInfo" style="display:none"></div>
       <div class="wwarn" id="wWarn" style="display:none"></div>
       <canvas class="wmini" id="wMini" width="280" height="198"></canvas>
       <div class="wplayers" id="wPlayers"></div>
       <div class="wrank" id="wRank" style="display:none"></div>
+      <div class="wfeed" id="wFeed"></div><div class="wnotice" id="wNotice" style="display:none"></div>
       <div class="wchat" id="wChatBox" ${fbUrl()?'':'style="display:none"'}><div class="wlog" id="wLog"></div><input id="wMsg" maxlength="60" placeholder="Enter를 눌러 채팅 (바른 말 고운 말)"></div>
       <div class="whelp">WASD·방향키 이동 · Shift 달리기(⚡체력) · Space 점프 · <b>E 잡기</b> · <b>F 문·엘리베이터</b> · <b>B 상점</b> · 마우스 드래그 시점 · 휠 확대 · Enter 채팅</div>
       <div class="woverlay" id="wOver" style="display:none"></div>
       <div class="wshop" id="wShop" style="display:none"></div>
       <div class="wload" id="wLoad">도시를 불러오는 중…</div>
     </div>
-    <div class="toolbar" style="margin-top:8px"><a class="btn" href="#/c/${cls}">← 나가기</a><button class="btn" id="wFull">⛶ 전체 화면</button><button class="btn" id="wShopBtn">🛒 상점 (B)</button><span class="muted" id="wMode"></span></div>`;
+    <div class="toolbar" style="margin-top:8px"><a class="btn" href="#/c/${cls}">← 나가기</a><button class="btn" id="wFull">⛶ 전체 화면</button><button class="btn" id="wShopBtn">🛒 상점 (B)</button><button class="btn" id="wSnd"></button><span class="muted" id="wMode"></span></div>`;
   const stage=$('#wStage'), loadEl=$('#wLoad');
   let THREE;
   try{ THREE=await import(THREE_URL); }catch(e){ loadEl.textContent='3D 프로그램을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 들어와요.'; return; }
@@ -1485,16 +1579,21 @@ async function startWalk(app, cls, me){
   const grass=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400), grassMat); grass.rotation.x=-Math.PI/2; grass.position.y=-0.05; scene.add(grass);
 
   /* --- 건물 --- */
-  const winC=document.createElement('canvas'); winC.width=64; winC.height=64; const wx=winC.getContext('2d');
-  wx.fillStyle='#ffffff'; wx.fillRect(0,0,64,64); wx.fillStyle='#a9bdd1'; wx.fillRect(12,16,40,30); wx.fillStyle='#cddbe8'; wx.fillRect(12,16,40,8);
-  const winTex=new THREE.CanvasTexture(winC); winTex.wrapS=winTex.wrapT=THREE.RepeatWrapping; winTex.colorSpace=THREE.SRGBColorSpace;
-  const nC=document.createElement('canvas'); nC.width=64; nC.height=64; const nx=nC.getContext('2d');
-  nx.fillStyle='#000000'; nx.fillRect(0,0,64,64); nx.fillStyle='#ffd27a'; nx.fillRect(12,16,40,30);
-  const nightTex=new THREE.CanvasTexture(nC); nightTex.wrapS=nightTex.wrapT=THREE.RepeatWrapping; nightTex.colorSpace=THREE.SRGBColorSpace;
+  const winTexC={};
+  function winTexOf(style,size,night){ const key=style+size+(night?'n':''); if(winTexC[key]) return winTexC[key];
+    const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
+    x.fillStyle=night?'#000000':'#ffffff'; x.fillRect(0,0,64,64);
+    const glass=night?'#ffd27a':'#a9bdd1', hi=night?'#ffd27a':'#cddbe8', U=u=>u*16, Y=v=>(3-v)*64/3;
+    winShapes(style,size).forEach(w=>{
+      if(w.t==='r'){ x.fillStyle=glass; x.fillRect(U(w.u0),Y(w.v1),U(w.u1-w.u0),Y(w.v0)-Y(w.v1)); x.fillStyle=hi; x.fillRect(U(w.u0),Y(w.v1),U(w.u1-w.u0),Math.min(8,(Y(w.v0)-Y(w.v1))*0.25));
+        if(style==='glass' && !night){ x.fillStyle='#e8eef5'; x.fillRect(U(w.u0)+U(w.u1-w.u0)/2-1,Y(w.v1),2,Y(w.v0)-Y(w.v1)); } }
+      else { x.fillStyle=glass; x.beginPath(); x.ellipse(U(w.u),Y(w.v),U(w.d/2),(w.d/2)*64/3,0,0,Math.PI*2); x.fill(); } });
+    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.colorSpace=THREE.SRGBColorSpace; winTexC[key]=t; return t; }
   const plain={}, plainMat=c=>plain[c]||(plain[c]=new THREE.MeshLambertMaterial({color:c}));
   const wallMats=[];
-  const wallMat=(c,w,floors)=>{ const rx=Math.max(1,Math.round(w/4)), ry=Math.max(1,floors);
-    const t=winTex.clone(); t.needsUpdate=true; t.repeat.set(rx,ry); const e=nightTex.clone(); e.needsUpdate=true; e.repeat.set(rx,ry);
+  const wallMat=(c,w,floors,b)=>{ const [style,size]=winOf(b); if(style==='none') return plainMat(c);
+    const rx=Math.max(1,Math.round(w/4)), ry=Math.max(1,floors);
+    const t=winTexOf(style,size,false).clone(); t.needsUpdate=true; t.repeat.set(rx,ry); const e=winTexOf(style,size,true).clone(); e.needsUpdate=true; e.repeat.set(rx,ry);
     const m=new THREE.MeshLambertMaterial({map:t, color:c, emissiveMap:e, emissive:'#000000'}); wallMats.push(m); return m; };
   const boxG=new THREE.BoxGeometry(1,1,1), cylG=new THREE.CylinderGeometry(.5,.5,1,28,1);
   const pyrG=new THREE.ConeGeometry(Math.SQRT1_2,1,4,1); pyrG.rotateY(Math.PI/4);
@@ -1514,9 +1613,9 @@ async function startWalk(app, cls, me){
     segs.forEach((sg,i)=>{ const h=sg.floors*FLOOR_M, sw=w*sg.scale, sd=dp*sg.scale, col=sg.color||b.color||t.color, last=i===segs.length-1;
       const top=plainMat(shade(col,.15));
       if(sg.shape==='pyr' && last){ const m=new THREE.Mesh(pyrG, plainMat(col)); m.scale.set(sw,h,sd); m.position.set(cx,y+h/2,cz); scene.add(m); }
-      else if(sg.shape==='cyl' || sg.shape==='dome'){ const m=new THREE.Mesh(cylG,[wallMat(col,sw*1.5,sg.floors),top,top]); m.scale.set(sw,h,sd); m.position.set(cx,y+h/2,cz); scene.add(m);
+      else if(sg.shape==='cyl' || sg.shape==='dome'){ const m=new THREE.Mesh(cylG,[wallMat(col,Math.PI*(sw+sd)/2,sg.floors,b),top,top]); m.scale.set(sw,h,sd); m.position.set(cx,y+h/2,cz); scene.add(m);
         if(sg.shape==='dome'&&last){ const dh=Math.min(sw,sd)/2, dm=new THREE.Mesh(domeG, plainMat(shade(col,.1))); dm.scale.set(sw,dh*2,sd); dm.position.set(cx,y+h,cz); scene.add(dm); } }
-      else { const wm=wallMat(col,(sw+sd)/2,sg.floors); const m=new THREE.Mesh(boxG,[wm,wm,top,top,wm,wm]); m.scale.set(sw,h,sd); m.position.set(cx,y+h/2,cz); scene.add(m);
+      else { const wm=wallMat(col,(sw+sd)/2,sg.floors,b); const m=new THREE.Mesh(boxG,[wm,wm,top,top,wm,wm]); m.scale.set(sw,h,sd); m.position.set(cx,y+h/2,cz); scene.add(m);
         if(sg.shape==='spire'&&last){ const shh=h*.4, sp=new THREE.Mesh(pyrG, plainMat(col)); sp.scale.set(sw*.9,shh,sd*.9); sp.position.set(cx,y+h+shh/2,cz); scene.add(sp); } }
       if(isSuperTall(b)){ for(let q=30; q<(b.floors||0); q+=30){ const zq=q*FLOOR_M; if(zq>=y && zq<y+h && sg.shape!=='pyr'){ const round=sg.shape==='cyl'||sg.shape==='dome';
           const band=new THREE.Mesh(round?cylG:boxG, plainMat('#f2c94c')); band.scale.set(sw*1.03,FLOOR_M,sd*1.03); band.position.set(cx,zq+FLOOR_M/2,cz); scene.add(band); } } }
@@ -1620,8 +1719,9 @@ async function startWalk(app, cls, me){
   const G={state: fbUrl()?'lobby':'play', round: fbUrl()?'':'solo', bg:'day', startAt:0, dur:0, seed:12345, total: fbUrl()?2000:600};
   const S={k:0, it:[], lv:{}, hu:false, iv:0, cool:0, lastBack:0, st:{sp:0,sta:0,rch:0,def:0}};
   const lv=k=>S.lv[k]||0;
+  let pendCatch=null, noticeT=null, lastNotice=0, said1m=false;
   const maxStam=()=>5+S.st.sta; let stam=5, exhausted=false;
-  const reach=()=>1.9+0.15*S.st.rch, coolMs=()=>(3-0.25*S.st.rch)*1000;
+  const reach=()=>2.6+0.2*S.st.rch, coolMs=()=>(3-0.25*S.st.rch)*1000;
   const speedMul=()=>Math.min(1.35, 1+0.03*S.st.sp+(S.it.includes('shoes')?0.15+0.03*lv('shoes'):0))*(S.it.includes('bag')?0.9+0.02*lv('bag'):1);
   const ST=ANI[me.a]||ANI.cat;
   let onRoof=null, travelling=false, safeIn=0, safeStart=0, outStart=0, mySafe=false;
@@ -1636,6 +1736,50 @@ async function startWalk(app, cls, me){
   const airMesh=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.6,0.6,0.12,20).rotateX(Math.PI/2), new THREE.MeshLambertMaterial({color:'#5fb6ff', emissive:'#103a66', emissiveIntensity:.5}), AIR_CAP);
   coinMesh.count=0; airMesh.count=0; coinMesh.frustumCulled=false; airMesh.frustumCulled=false; scene.add(coinMesh, airMesh);
   const tmpO=new THREE.Object3D();
+  /* --- 효과(임팩트) --- */
+  const fxList=[], texCache={}, V=(x,y,z)=>new THREE.Vector3(x,y,z);
+  let isRun=false, dustT=0, shakeT=0, shakeA=0, speedOp=0;
+  function fxTex(kind){ if(texCache[kind]) return texCache[kind]; const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
+    if(kind==='dust'){ const g=x.createRadialGradient(32,32,2,32,32,30); g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); }
+    if(kind==='star'){ x.fillStyle='#ffffff'; x.translate(32,32); x.beginPath(); for(let i=0;i<10;i++){ const r=i%2?11:30, a=i*Math.PI/5-Math.PI/2; x.lineTo(Math.cos(a)*r, Math.sin(a)*r); } x.closePath(); x.fill(); }
+    if(kind==='coin'){ x.fillStyle='#f2c230'; x.beginPath(); x.arc(32,32,25,0,Math.PI*2); x.fill(); x.strokeStyle='#a87b00'; x.lineWidth=5; x.stroke(); x.fillStyle='#fff3b0'; x.beginPath(); x.arc(24,24,7,0,Math.PI*2); x.fill(); }
+    if(kind==='ring'){ x.strokeStyle='rgba(255,255,255,.95)'; x.lineWidth=6; x.beginPath(); x.arc(32,32,26,0,Math.PI*2); x.stroke(); }
+    const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; texCache[kind]=t; return t; }
+  function fxAdd(kind, pos, o={}){ const m=new THREE.SpriteMaterial({map:fxTex(kind), transparent:true, depthWrite:false, color:o.color||'#ffffff'}); const sp=new THREE.Sprite(m);
+    sp.position.copy(pos); const s0=o.size||0.6; sp.scale.set(s0,s0,1); scene.add(sp);
+    fxList.push({sp, vel:o.vel||V(0,0,0), life:o.life||0.6, t:-(o.delay||0), s0, s1:o.grow??s0, grav:o.grav||0, from:o.from, to:o.to, arc:o.arc||3}); }
+  function fxUpdate(dt){ for(let i=fxList.length-1;i>=0;i--){ const f=fxList[i]; f.t+=dt; if(f.t<0){ f.sp.visible=false; continue; } f.sp.visible=true; const k=f.t/f.life;
+      if(k>=1){ scene.remove(f.sp); if(!f.label) f.sp.material.dispose(); fxList.splice(i,1); continue; }
+      if(f.from&&f.to){ const a=f.from(), b=f.to(); if(!a||!b){ f.t=f.life; continue; } f.sp.position.set(a.x+(b.x-a.x)*k, a.y+1.2+(b.y-a.y)*k+Math.sin(Math.PI*k)*f.arc, a.z+(b.z-a.z)*k); }
+      else { f.vel.y-=f.grav*dt; f.sp.position.addScaledVector(f.vel, dt); }
+      if(!f.label){ const sc=f.s0+(f.s1-f.s0)*k; f.sp.scale.set(sc,sc,1); }
+      f.sp.material.opacity = f.from ? 1 : (f.label ? Math.min(1,(1-k)*2) : 1-k); } }
+  function fxBurst(pos, n=18, color='#fff3a0'){ for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, u=Math.random()*0.8+0.2;
+      fxAdd('star', V(pos.x,pos.y+1.3,pos.z), {vel:V(Math.cos(a)*6*u, 3+Math.random()*4, Math.sin(a)*6*u), grav:9, life:0.7, size:0.55, grow:0.15, color}); }
+    fxAdd('ring', V(pos.x,pos.y+1.2,pos.z), {life:0.45, size:0.5, grow:5.5, color}); }
+  function fxCoins(fromFn, toFn, n){ const m=Math.min(18, Math.max(3, n)); for(let i=0;i<m;i++) fxAdd('coin', V(0,-99,0), {from:fromFn, to:toFn, life:0.75, size:0.6, arc:2.2+Math.random()*2.2, delay:i*0.045}); }
+  function fxText(text, pos, fg='#ffffff', bg='rgba(214,69,69,.95)'){ const lb=makeLabel(THREE, text, {bg, fg, h:1.3}); lb.position.set(pos.x,pos.y+3.8,pos.z); scene.add(lb);
+    fxList.push({sp:lb, vel:V(0,1.6,0), life:1.4, t:0, s0:1, s1:1, grav:0, label:true}); }
+  /* --- 잡기 팔 --- */
+  const armG=new THREE.CylinderGeometry(0.15,0.19,1,12); armG.rotateX(Math.PI/2); armG.translate(0,0,0.5);
+  const handG=new THREE.SphereGeometry(0.32,16,12), fingerG=new THREE.SphereGeometry(0.12,8,6);
+  const arms=[];
+  // from: ()=>Vector3, yaw: ()=>각도, len: 팔 길이(m), hit: 닿았는지
+  function swingArm(from, yaw, len, color, hit){ const p0=from(); if(!p0) return;
+    const g=new THREE.Group(), mat=new THREE.MeshLambertMaterial({color}), hm=new THREE.MeshLambertMaterial({color:shade(color,.3)});
+    const arm=new THREE.Mesh(armG, mat), hand=new THREE.Group(); hand.add(new THREE.Mesh(handG, hm));
+    [-0.2,-0.07,0.07,0.2].forEach(x=>{ const f=new THREE.Mesh(fingerG, hm); f.position.set(x,0.08,0.27); hand.add(f); });
+    g.add(arm, hand); scene.add(g); arms.push({g, arm, hand, mat, hm, from, yaw, len:Math.max(0.6,len), hit, t:0}); }
+  function armUpdate(dt){ for(let i=arms.length-1;i>=0;i--){ const a=arms[i]; a.t+=dt; const t=a.t;
+      const k = t<0.15 ? 1-(1-t/0.15)**3 : t<0.5 ? 1 : t<0.75 ? 1-(t-0.5)/0.25 : -1;
+      const p0=a.from();
+      if(k<0 || !p0){ scene.remove(a.g); a.mat.dispose(); a.hm.dispose(); arms.splice(i,1); continue; }
+      const L=a.len*k; a.g.position.set(p0.x, p0.y+1.0, p0.z); a.g.rotation.y=a.yaw(); a.arm.scale.set(1,1,Math.max(0.01,L)); a.hand.position.z=L;
+      const sq = a.hit && t>0.15 && t<0.5 ? 0.7 : 1; a.hand.scale.set(1.15, sq, 1.15);
+      if(!a.ringDone && t>=0.15){ a.ringDone=true; const hp=a.hand.getWorldPosition(V(0,0,0)); fxAdd('ring', V(hp.x,hp.y-0.9,hp.z), {life:0.35, size:0.3, grow:a.hit?2.6:1.6, color:a.hit?'#ffd84d':'#ffffff'}); } } }
+  function shake(a, t=0.4){ shakeA=Math.max(shakeA,a); shakeT=Math.max(shakeT,t); }
+  function flash(c){ const el=$('#wFlash'); if(!el) return; el.style.transition='none'; el.style.background=c; el.style.opacity='1'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ el.style.transition='opacity .7s'; el.style.opacity='0'; })); }
+  const posOf=id=> id===pid ? meAv.g.position : remotes[id]?.av.g.position;
   const waveSizes=()=>{ const T=Math.max(200, G.total||2000), w0=Math.round(T*0.3), ws=Math.max(20,Math.round(T*0.05)); return {w0, ws, n:Math.ceil((T-w0)/ws)}; };
   function makeWave(w){
     const {w0,ws}=waveSizes(), R=rng((G.seed>>>0) ^ ((w+1)*2654435761)), n = w===0? w0 : ws, out=[];
@@ -1694,6 +1838,8 @@ async function startWalk(app, cls, me){
   cv.addEventListener('wheel',e=>{ e.preventDefault(); camDist=Math.min(80,Math.max(5,camDist*(e.deltaY>0?1.1:1/1.1))); },{passive:false});
   $('#wFull').onclick=()=>{ if(document.fullscreenElement) document.exitFullscreen(); else stage.requestFullscreen?.(); };
   $('#wShopBtn').onclick=()=>toggleShop();
+  const sndBtn=$('#wSnd'), sndTxt=()=>{ sndBtn.textContent = sfxOn()?'🔊 소리 켜짐':'🔇 소리 꺼짐'; }; sndTxt();
+  sndBtn.onclick=()=>{ ls.set('walkSfx', !sfxOn()); sndTxt(); stage.focus(); };
   stage.focus();
   const resize=()=>{ const w=stage.clientWidth, h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); };
   const ro=new ResizeObserver(resize); ro.observe(stage); resize();
@@ -1720,6 +1866,13 @@ async function startWalk(app, cls, me){
     rankEl.style.display='';
     rankEl.innerHTML=`<b>🏆 사람이 된 순서</b>${ranks.slice(0,10).map((r,i)=>`<div>${i+1}. ${esc(r.n)}</div>`).join('')}`;
   }
+  const feedEl=$('#wFeed'), noticeEl=$('#wNotice');
+  function feed(html, cls2=''){ const d=document.createElement('div'); d.className='wfeed-i '+cls2; d.innerHTML=html; feedEl.prepend(d);
+    while(feedEl.children.length>5) feedEl.lastChild.remove(); setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(),650); }, 7000); }
+  function showNotice(t){ clearTimeout(noticeT); noticeEl.innerHTML=`<small>📢 선생님 알림</small>${esc(t)}`; noticeEl.style.display='';
+    noticeEl.style.animation='none'; void noticeEl.offsetWidth; noticeEl.style.animation=''; sfx('notice'); feed(`📢 선생님: <b>${esc(t)}</b>`, 't');
+    noticeT=setTimeout(()=>{ noticeEl.style.display='none'; }, 7000); }
+  const nameOf=id=> id===pid ? me.n : (remotes[id]?.n||'친구');
   function overlay(html){ if(!html){ overEl.style.display='none'; return; } overEl.style.display=''; overEl.innerHTML=`<div class="wover-card">${html}</div>`; }
   function toggleShop(force){
     const show = force!==undefined ? force : shopEl.style.display==='none';
@@ -1742,7 +1895,8 @@ async function startWalk(app, cls, me){
     shopEl.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{ const k=b.dataset.buy, v=ITEMS[k]; if(S.k<v.cost||has(k)) return; S.k-=v.cost; S.it=[...S.it,k]; S.lv={...S.lv,[k]:0}; pushMe(); toast(`${v.icon} ${v.name} 장착!`); toggleShop(true); });
     shopEl.querySelectorAll('[data-enh]').forEach(b=>b.onclick=()=>{ const k=b.dataset.enh, l=lv(k), e=ENH[l], v=ITEMS[k]; if(!e||!has(k)||S.k<e.cost) return;
       S.k-=e.cost; const ok=Math.random()<e.p;
-      if(ok){ S.lv={...S.lv,[k]:l+1}; toast(`✨ 강화 성공! ${v.icon} ${v.name} +${l+1}`); } else toast(`💥 강화 실패… (${Math.round(e.p*100)}% 확률이었어요) 동전 ${e.cost}개가 사라졌어요`);
+      sfx(ok?'ok':'fail');
+      if(ok){ S.lv={...S.lv,[k]:l+1}; toast(`✨ 강화 성공! ${v.icon} ${v.name} +${l+1}`); if(fb && l+1>=3) evPush({ty:'enh', i:k, l:l+1}); } else toast(`💥 강화 실패… (${Math.round(e.p*100)}% 확률이었어요) 동전 ${e.cost}개가 사라졌어요`);
       pushMe(); toggleShop(true); const card=shopEl.querySelector(`[data-enh="${k}"]`)?.closest('.wshop-item')||shopEl.querySelector(`[data-drop="${k}"]`)?.closest('.wshop-item'); if(card){ card.classList.add(ok?'enh-ok':'enh-fail'); } });
     shopEl.querySelectorAll('[data-stat]').forEach(b=>b.onclick=()=>{ const k=b.dataset.stat, l=S.st[k], c=STAT_COST(l); if(l>=STATS[k].max||S.k<c) return; S.k-=c; S.st={...S.st,[k]:l+1}; if(k==='sta') stam=maxStam(); pushMe(); toast(`${STATS[k].icon} ${STATS[k].name} ${l+1}레벨!`); toggleShop(true); });
     shopEl.querySelectorAll('[data-drop]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.drop; const r=await dialog({title:'버릴까요?', msg:`${ITEMS[k].name}을(를) 버리면 동전과 강화는 돌려받지 못해요.`, buttons:[['취소',false],['버리기',true,'danger']]}); if(r.btn){ S.it=S.it.filter(x=>x!==k); const nl={...S.lv}; delete nl[k]; S.lv=nl; pushMe(); toggleShop(true); } });
@@ -1776,7 +1930,7 @@ async function startWalk(app, cls, me){
         if(!rm || rm.kind!==kind){ const av=makeAnimal(THREE, kind, col); const tag=makeLabel(THREE, cleanChat(v.n).slice(0,8)||'친구', {bg:'rgba(255,255,255,.92)', h:0.8}); tag.position.y=kind==='human'?3.1:2.75; av.g.add(tag);
           if(rm){ av.g.position.copy(rm.av.g.position); av.g.rotation.y=rm.av.g.rotation.y; scene.remove(rm.av.g); } else av.g.position.set(+v.x||0, 0, +v.z||0);
           scene.add(av.g); rm=remotes[k]={...(rm||{}), av, kind, n:cleanChat(v.n).slice(0,8)||'친구', walkT:0}; }
-        Object.assign(rm, {tx:+v.x||0, tz:+v.z||0, ty:+v.y||0, tr:+v.r||0, m:v.m?1:0, k:+v.k||0, hu:!!v.hu, iv:!!v.iv, sf:!!v.sf, seen:performance.now()});
+        Object.assign(rm, {col, tx:+v.x||0, tz:+v.z||0, ty:+v.y||0, tr:+v.r||0, m:+v.m||0, k:+v.k||0, hu:!!v.hu, iv:!!v.iv, sf:!!v.sf, seen:performance.now()});
         if(!rm.visible){ rm.visible=true; scene.add(rm.av.g); }
         updatePlayers(); };
       dbM.onChildAdded(pRef, upsert); dbM.onChildChanged(pRef, upsert);
@@ -1790,8 +1944,14 @@ async function startWalk(app, cls, me){
       // 이벤트(잡기 · 동전 받기)
       const seenEv=new Set();
       dbM.onChildAdded(dbM.query(dbM.ref(db,`rooms/${cls}/events`), dbM.limitToLast(40)), snap=>{ const v=snap.val(); if(!v||seenEv.has(snap.key)) return; seenEv.add(snap.key);
-        if(v.to!==pid || v.r!==G.round || (v.at||0)<joinAt-3000) return;
-        if(v.ty==='catch') onCaught(v); if(v.ty==='pay') onPaid(v); });
+        if(v.r!==G.round || (v.at||0)<joinAt-3000) return;
+        if(v.ty==='catch' && v.f!==pid){ const a=posOf(v.f), b=posOf(v.to); if(a&&b&&Math.hypot(a.x-px,a.z-pz)<80){ const d=Math.hypot(b.x-a.x,b.z-a.z);
+          swingArm(()=>posOf(v.f), ()=>{ const a2=posOf(v.f), b2=posOf(v.to); return a2&&b2? Math.atan2(b2.x-a2.x, b2.z-a2.z) : 0; }, Math.min(4, Math.max(0.6,d-0.2)), remotes[v.f]?.col||'#f2a65a', true); } }
+        if(v.ty==='pay' && v.to!==pid && v.f!==pid){ const a=posOf(v.f), b=posOf(v.to); if(a&&b&&Math.hypot(a.x-px,a.z-pz)<80){ fxBurst(a,12); if(+v.n>0) fxCoins(()=>posOf(v.f), ()=>posOf(v.to), +v.n||0); } }
+        if(v.ty==='pay' && +v.n>0){ const cn=esc(cleanChat(v.tn||nameOf(v.to)).slice(0,8)), vn=esc(cleanChat(v.fn).slice(0,8)); feed(`🫳 <b>${cn}</b> → ${vn} 잡기! 🪙${Math.floor(+v.n)}`); if(v.to!==pid&&v.f!==pid) sfx('feed'); }
+        if(v.ty==='enh' && ITEMS[v.i] && +v.l>=3){ feed(`✨ <b>${esc(cleanChat(v.fn).slice(0,8))}</b> ${ITEMS[v.i].icon} ${ITEMS[v.i].name} <b>+${Math.min(5,Math.floor(+v.l))}</b> 강화 성공!`); }
+        if(v.to!==pid) return;
+        if(v.ty==='catch') onCaught(v); if(v.ty==='pay') onPaid(v); if(v.ty==='miss') onMiss(v); });
       // 게임 상태(선생님)
       dbM.onValue(dbM.ref(db,`rooms/${cls}/game`), s=>applyGame(s.val()||{state:'lobby', bg:'day', round:''}));
       $('#wMode').textContent='👫 함께 걷기 연결됨';
@@ -1812,10 +1972,12 @@ async function startWalk(app, cls, me){
     const prevState=G.state, prevRound=G.round;
     Object.assign(G, {state:g.state||'lobby', bg:g.bg||'day', round:g.round||'', startAt:+g.startAt||0, dur:+g.dur||0, seed:+g.seed||12345, total:+g.total||2000, coinOpt:g.coinOpt||'auto'});
     applyTheme(G.bg);
-    if(G.round!==curRound){ curRound=G.round; clearCoins(); takenSet.clear(); ranks=[]; renderRanks(); resetMe(); ended=false;
+    if(g.notice && +g.notice.at>lastNotice){ lastNotice=+g.notice.at; if(now2()-lastNotice<20000 && g.notice.t) showNotice(cleanChat(String(g.notice.t)).slice(0,40)); }
+    if(G.round!==curRound){ said1m=false; curRound=G.round; clearCoins(); takenSet.clear(); ranks=[]; renderRanks(); resetMe(); ended=false;
       if(takenRef){ try{ fb.dbM.off(takenRef); }catch(e){} }
       if(fb && G.round){ takenRef=fb.dbM.ref(fb.db,`rooms/${cls}/taken/${G.round}`); fb.dbM.onChildAdded(takenRef, s=>markTaken(s.key));
-        fb.dbM.onChildAdded(fb.dbM.ref(fb.db,`rooms/${cls}/ranks/${G.round}`), s=>{ const v=s.val(); if(!v) return; ranks.push({id:s.key, n:cleanChat(v.n).slice(0,8), t:+v.t||0}); ranks.sort((a,b)=>a.t-b.t); renderRanks(); }); } }
+        fb.dbM.onChildAdded(fb.dbM.ref(fb.db,`rooms/${cls}/ranks/${G.round}`), s=>{ const v=s.val(); if(!v) return; ranks.push({id:s.key, n:cleanChat(v.n).slice(0,8), t:+v.t||0}); ranks.sort((a,b)=>a.t-b.t); renderRanks();
+          if((+v.t||0)>joinAt-3000){ const i=ranks.findIndex(r=>r.id===s.key)+1; feed(`🧑 <b>${esc(cleanChat(v.n).slice(0,8))}</b> 사람으로 변신! (${i}등)`, ''); if(s.key!==pid) sfx('ok'); } }); } }
     if(G.state==='lobby'){ overlay(null); updatePlayers(); }
     else if(G.state==='play'){
       if(prevState!=='play' || prevRound!==G.round){ const wait=G.startAt-now2();
@@ -1841,6 +2003,7 @@ async function startWalk(app, cls, me){
   }
   function addCoins(n){ if(S.hu) return; S.k+=n; pushMe(); if(S.k>=GOAL) becomeHuman(); }
   function pickup(c){
+    sfx('coin'); fxAdd('star', V(c.x,c.y,c.z), {vel:V(0,2.5,0), life:0.4, size:0.7, grow:0.1, color:c.air?'#9fd6ff':'#fff3a0'}); if(c.v>1) fxText(`+${c.v}`, V(c.x,c.y-3,c.z), '#1d2533', c.air?'rgba(159,214,255,.97)':'rgba(255,216,77,.97)');
     c.taken=true; placeCoin(c, performance.now()/1000); coinMesh.instanceMatrix.needsUpdate=true; airMesh.instanceMatrix.needsUpdate=true;
     if(!fb){ addCoins(c.v); return; }
     fb.dbM.set(fb.dbM.ref(fb.db,`rooms/${cls}/taken/${G.round}/${c.id}`), pid).then(()=>addCoins(c.v)).catch(()=>{});
@@ -1849,35 +2012,50 @@ async function startWalk(app, cls, me){
   function behindTarget(){
     let best=null, bd=reach();
     Object.entries(remotes).forEach(([k,rm])=>{ if(!rm.visible||rm.hu||rm.iv||rm.sf) return; const g=rm.av.g, dx=px-g.position.x, dz=pz-g.position.z, dist=Math.hypot(dx,dz);
-      if(dist>=bd || Math.abs(g.position.y-(baseY()+py))>1.6) return; const fwd=[Math.sin(g.rotation.y), Math.cos(g.rotation.y)], dot=(fwd[0]*dx+fwd[1]*dz)/(dist||1);
-      if(dot<-0.35){ best={k,rm}; bd=dist; } });
+      if(dist>=bd || Math.abs(g.position.y-(baseY()+py))>1.8) return; const fwd=[Math.sin(g.rotation.y), Math.cos(g.rotation.y)], dot=(fwd[0]*dx+fwd[1]*dz)/(dist||1);
+      if(dot<-0.15){ best={k,rm}; bd=dist; } });
     return best;
   }
   function tryCatch(){
     if(!fb||!playing()||S.hu) return;
     if(mySafe){ toast('🌳 안전 구역 안에서는 잡을 수 없어요'); return; }
     if(performance.now()<S.cool){ toast('잠깐! 다시 잡으려면 조금 기다려요'); return; }
-    const t=behindTarget(); if(!t){ toast('친구 등 뒤에 바짝 붙어서 E를 눌러요'); return; }
+    const t=behindTarget();
+    if(!t){ if(performance.now()<(S.whiff||0)) return; S.whiff=performance.now()+450; const R=reach();
+      swingArm(()=>meAv.g.position, ()=>face, R, me.c, false); sfx('swipe'); toast(`👋 내 팔은 ${R.toFixed(1)}m까지 닿아요 · 친구 등 뒤에서 E!`); return; }
     S.cool=performance.now()+coolMs();
+    { const tp=t.rm.av.g.position, d=Math.hypot(tp.x-px,tp.z-pz); swingArm(()=>meAv.g.position, ()=>{ const q=t.rm.av.g.position; return Math.atan2(q.x-px, q.z-pz); }, Math.max(0.6,d-0.2), me.c, true); }
     fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {ty:'catch', f:pid, fn:me.n, to:t.k, r:G.round, at:now2(), x:+px.toFixed(2), z:+pz.toFixed(2)});
-    toast(`🫣 ${t.rm.n} 잡기 시도!`);
+    toast(`🫣 ${t.rm.n} 잡기!`); sfx('swipe'); shake(0.5,0.2); flash('rgba(255,255,255,.35)');
+    { const gp=t.rm.av.g.position; fxAdd('ring', V(gp.x,gp.y+1.2,gp.z), {life:0.4, size:0.5, grow:4.5, color:'#ffffff'}); fxBurst(gp, 10, '#ffffff'); fxText('🫳 잡았다!', gp, '#1d2533', 'rgba(255,255,255,.97)'); }
+    pendCatch={k:t.k, at:performance.now()};
   }
+  const evPush=o=>fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {...o, f:pid, fn:me.n, r:G.round, at:now2()});
   function onCaught(v){
-    if(!playing()||S.hu||S.iv>performance.now()||mySafe||travelling) return;
-    if(Math.hypot((v.x||0)-px,(v.z||0)-pz)>3.5) return;
+    const why = !playing()||S.hu ? '' : S.iv>performance.now() ? '무적 중(방금 잡혔어요)' : mySafe ? '안전 구역 안' : travelling ? '엘리베이터 타는 중' : Math.hypot((v.x||0)-px,(v.z||0)-pz)>7 ? '너무 멀어졌어요' : null;
+    if(why!==null){ if(why) evPush({ty:'miss', to:v.f, why}); return; }
     const amt = Math.floor(S.k * Math.max(0.1, (1-0.08*S.st.def) * (has('bag')?0.5-0.05*lv('bag'):1)));
     S.k-=amt; S.iv=performance.now()+5000; pushMe(); setTimeout(()=>pushMe(), 5100);
-    if(amt>0) fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {ty:'pay', f:pid, fn:me.n, to:v.f, n:amt, r:G.round, at:now2()});
+    evPush({ty:'pay', to:v.f, tn:cleanChat(v.fn).slice(0,8), n:amt});
     toast(`😱 ${cleanChat(v.fn).slice(0,8)}에게 잡혔어요! 동전 ${amt}개를 잃었어요 (5초 무적)`);
+    sfx('caught'); flash('rgba(214,69,69,.6)'); shake(1.4,0.5); fxBurst(meAv.g.position, 14, '#ffb3b3');
+    if(amt>0 && posOf(v.f)) fxCoins(()=>meAv.g.position, ()=>posOf(v.f), amt);
+    fxText(`😱 -${amt}`, meAv.g.position);
   }
-  function onPaid(v){ const n=Math.max(0,Math.min(500,Math.floor(+v.n||0))); if(!n) return; toast(`🎉 ${cleanChat(v.fn).slice(0,8)}의 동전 ${n}개를 빼앗았어요!`); addCoins(n); }
+  function onMiss(v){ pendCatch=null; toast(`😅 ${cleanChat(v.fn).slice(0,8)} 잡기 실패 — ${cleanChat(v.why).slice(0,20)}`); sfx('fail'); const vp=posOf(v.f); if(vp) fxText('💨 놓쳤다!', vp, '#ffffff', 'rgba(90,100,120,.95)'); }
+  function onPaid(v){ pendCatch=null; const n=Math.max(0,Math.min(500,Math.floor(+v.n||0)));
+    if(!n){ toast(`🫳 ${cleanChat(v.fn).slice(0,8)}을(를) 잡았지만 동전이 하나도 없었어요!`); sfx('swipe'); const vp=posOf(v.f); if(vp){ fxBurst(vp, 12, '#ffffff'); fxText('텅~ 🪹', vp, '#1d2533', 'rgba(255,255,255,.97)'); } return; }
+    toast(`🎉 ${cleanChat(v.fn).slice(0,8)}의 동전 ${n}개를 빼앗았어요!`);
+    sfx('got'); flash('rgba(255,216,77,.55)'); shake(0.9,0.35); const vp=posOf(v.f); if(vp){ fxBurst(vp, 26); fxBurst(vp, 12, '#ffb3b3'); fxCoins(()=>posOf(v.f), ()=>meAv.g.position, n); }
+    fxText(`🎉 +${n}`, meAv.g.position, '#1d2533', 'rgba(255,216,77,.97)'); addCoins(n); }
   function send(t){
     if(!fb||!myRef) return;
     if(t-lastSent.t<250) return;
     const yy=baseY()+py, dx=Math.abs(px-lastSent.x)+Math.abs(pz-lastSent.z)+Math.abs(yy-lastSent.y), dr=Math.abs(face-lastSent.r);
-    if(dx>0.05 || dr>0.05 || (moving?1:0)!==lastSent.m || (mySafe?1:0)!==lastSent.sf || t-lastSent.t>5000){
-      lastSent={x:px,z:pz,y:yy,r:face,m:moving?1:0,sf:mySafe?1:0,t};
-      fb.dbM.update(myRef, {x:+px.toFixed(2), z:+pz.toFixed(2), y:+yy.toFixed(2), r:+face.toFixed(2), m:moving?1:0, sf:mySafe?1:0, h:Date.now()});
+    const mv = moving ? (isRun?2:1) : 0;
+    if(dx>0.05 || dr>0.05 || mv!==lastSent.m || (mySafe?1:0)!==lastSent.sf || t-lastSent.t>5000){
+      lastSent={x:px,z:pz,y:yy,r:face,m:mv,sf:mySafe?1:0,t};
+      fb.dbM.update(myRef, {x:+px.toFixed(2), z:+pz.toFixed(2), y:+yy.toFixed(2), r:+face.toFixed(2), m:mv, sf:mySafe?1:0, h:Date.now()});
     }
   }
 
@@ -1909,13 +2087,13 @@ async function startWalk(app, cls, me){
   loadEl.remove();
   function loop(t){
     if(!alive) return;
-    const dt=Math.min(0.1,(t-last)/1000); last=t; const ts=t/1000;
+    const dt=Math.min(0.1,(t-last)/1000); last=t; const ts=t/1000; isRun=false;
     const canMove = (!fb || G.state!=='lobby') && !(G.state==='play' && now2()<G.startAt) && !ended && shopEl.style.display==='none' && !travelling;
     const f=[-Math.sin(camYaw), -Math.cos(camYaw)], rt=[-f[1], f[0]];
     const fw=canMove?(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0):0, st2=canMove?(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0):0;
     let mvx=f[0]*fw+rt[0]*st2, mvz=f[1]*fw+rt[1]*st2; const len=Math.hypot(mvx,mvz);
     moving=len>0.01;
-    if(moving){ mvx/=len; mvz/=len; const running=keys.shift && !exhausted && stam>0; if(running){ stam-=dt; if(stam<=0){ stam=0; exhausted=true; } }
+    if(moving){ mvx/=len; mvz/=len; const running=keys.shift && !exhausted && stam>0; isRun=running; if(running){ stam-=dt; if(stam<=0){ stam=0; exhausted=true; fxText('헉헉 💦', meAv.g.position, '#1d2533', 'rgba(255,255,255,.95)'); sfx('huff'); } }
       let sp=(6.2+0.55*ST.sp)*(running?1.6:1)*speedMul(); sp*=dt;
       const nx=Math.max(-BW/2+0.8,Math.min(BW/2-0.8,px+mvx*sp)), nz=Math.max(-BD/2+0.8,Math.min(BD/2-0.8,pz+mvz*sp));
       if(!blocked(nx,pz)) px=nx; if(!blocked(px,nz)) pz=nz;
@@ -1941,7 +2119,8 @@ async function startWalk(app, cls, me){
       if(performance.now()-rm.seen>20000){ if(rm.visible){ rm.visible=false; scene.remove(g); updatePlayers(); } return; }
       const a=Math.min(1,dt*10); g.position.x+=(rm.tx-g.position.x)*a; g.position.z+=(rm.tz-g.position.z)*a; g.position.y+=(rm.ty-g.position.y)*a;
       let dA=rm.tr-g.rotation.y; while(dA>Math.PI) dA-=Math.PI*2; while(dA<-Math.PI) dA+=Math.PI*2; g.rotation.y+=dA*a;
-      rm.walkT+= rm.m? dt*11 : 0; rm.av.legs.forEach((l,i)=>l.rotation.x= rm.m? Math.sin(rm.walkT+(i%2?Math.PI:0)+(i>1?Math.PI:0))*0.7 : 0);
+      rm.walkT+= rm.m? dt*(rm.m===2?16:11) : 0;
+      if(rm.m===2 && rm.visible){ rm.dustT=(rm.dustT||0)-dt; if(rm.dustT<=0 && Math.hypot(g.position.x-px,g.position.z-pz)<60){ rm.dustT=0.1; fxAdd('dust', V(g.position.x-Math.sin(g.rotation.y)*0.7, g.position.y+0.25, g.position.z-Math.cos(g.rotation.y)*0.7), {vel:V(0,0.8,0), life:0.5, size:0.45, grow:1.5, color:'#efe7d6'}); } } rm.av.legs.forEach((l,i)=>l.rotation.x= rm.m? Math.sin(rm.walkT+(i%2?Math.PI:0)+(i>1?Math.PI:0))*0.7 : 0);
       if(rm.av.bubble && t>rm.av.bubbleT){ g.remove(rm.av.bubble); rm.av.bubble=null; }
       if(has('alarm') && !rm.hu && !S.hu){ const dx=g.position.x-px, dz=g.position.z-pz, dist=Math.hypot(dx,dz); if(dist<7+1.5*lv('alarm')){ const fwd=[Math.sin(face),Math.cos(face)]; if((fwd[0]*dx+fwd[1]*dz)/(dist||1)<-0.3) warn=true; } } });
     if(meAv.bubble && t>meAv.bubbleT){ meAv.g.remove(meAv.bubble); meAv.bubble=null; }
@@ -1959,6 +2138,11 @@ async function startWalk(app, cls, me){
     const cp=Math.cos(camPitch), tx=px, ty=baseY()+py+1.6, tz=pz;
     camera.position.set(tx+Math.sin(camYaw)*cp*camDist, ty+Math.sin(camPitch)*camDist, tz+Math.cos(camYaw)*cp*camDist);
     camera.lookAt(tx,ty,tz);
+    if(shakeT>0){ shakeT-=dt; const sa=shakeA*Math.max(0,shakeT)/0.4; camera.position.x+=(Math.random()-.5)*sa; camera.position.y+=(Math.random()-.5)*sa; camera.position.z+=(Math.random()-.5)*sa; } else shakeA=0;
+    { const tf=isRun&&moving?72:60; if(Math.abs(camera.fov-tf)>0.05){ camera.fov+=(tf-camera.fov)*Math.min(1,dt*6); camera.updateProjectionMatrix(); } }
+    speedOp+=((isRun&&moving?0.6:0)-speedOp)*Math.min(1,dt*8); const spEl=$('#wSpeed'); if(spEl) spEl.style.opacity=speedOp.toFixed(2);
+    dustT-=dt; if(isRun && moving && py<0.05 && dustT<=0){ dustT=0.06; for(let q=0;q<2;q++) fxAdd('dust', V(px-Math.sin(face)*0.7+(Math.random()-.5)*0.6, baseY()+0.25, pz-Math.cos(face)*0.7+(Math.random()-.5)*0.6), {vel:V((Math.random()-.5)*0.8,0.9,(Math.random()-.5)*0.8), life:0.55, size:0.45, grow:1.6, color:THEMES[themeKey]?.night?'#9aa3b8':'#efe7d6'}); }
+    fxUpdate(dt); armUpdate(dt);
     renderer.render(scene,camera);
     // 미니맵 (레이더가 있어야 친구가 보여요)
     mx.drawImage(miniBase,0,0);
@@ -1966,7 +2150,8 @@ async function startWalk(app, cls, me){
     roofs.forEach(r=>{ const [a,b]=toP(r.door.x,r.door.z); mx.fillStyle='#f2c94c'; mx.fillRect(a/5-1.5,b/5-1.5,3,3); });
     const [ma,mb]=toP(px,pz); mx.save(); mx.translate(ma/5,mb/5); mx.rotate(-face); mx.fillStyle='#d64545'; mx.beginPath(); mx.moveTo(0,6); mx.lineTo(-4,-4); mx.lineTo(4,-4); mx.closePath(); mx.fill(); mx.restore();
     showInfo(findInfo());
-    if(t-hudT>120){ hudT=t; hud(); }
+    if(t-hudT>120){ hudT=t; hud(); if(!said1m && playing() && G.dur>60 && G.startAt+G.dur*1000-now2()<=60000){ said1m=true; feed('⏱ <b>1분</b> 남았어요!', 't'); sfx('notice'); } }
+    if(pendCatch && performance.now()-pendCatch.at>2500){ pendCatch=null; toast('😅 친구가 응답이 없어요. 다시 잡아 봐요'); }
     send(t);
     raf=requestAnimationFrame(loop);
   }
@@ -2023,6 +2208,10 @@ async function teacherPage(app, cls){
           </div>
           <p class="muted" id="tState" style="margin-top:10px"></p>
           <p class="muted">순서: ① 대기실 열기 → ② 학생들이 "우리 도시 걸어 보기"로 들어옴 → ③ 다 들어오면 시작 → ④ 끝나면 판 초기화</p>
+          <h3>5. 📢 전체 알림 <span class="muted">(모든 학생 화면 가운데에 7초 동안 떠요)</span></h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="tNote" maxlength="40" placeholder="예) 3분 뒤에 끝나요!" style="flex:1;min-width:200px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px"><button class="btn primary" id="tNoteGo">보내기</button></div>
+          <div class="tbg" style="margin-top:8px">${['⏸ 모두 잠깐 멈춰요!','👀 선생님을 봐요','⏱ 곧 끝나요!','🗣️ 바른 말 고운 말!','🎉 잘하고 있어요!'].map(t=>`<button class="btn" data-note="${esc(t)}">${t}</button>`).join('')}</div>
+          <p class="muted" id="tNoteLast"></p>
         </div>
       </div>
       <div>
@@ -2070,6 +2259,11 @@ async function teacherPage(app, cls){
     if(!game.round || game.state==='end'){ await Promise.all(['taken','ranks','events'].map(k=>dbM.remove(dbM.ref(db,`rooms/${cls}/${k}`)).catch(()=>{}))); upd.round=roomId(); }
     await dbM.update(gRef, upd); toast(`3초 뒤 시작해요! (동전 총 ${total}개)`);
   };
+  const sendNote=async t=>{ t=cleanChat(String(t||'')).trim().slice(0,40); if(!t){ toast('알림 내용을 써 주세요'); return; }
+    try{ await dbM.update(gRef,{notice:{t, at:now2()}}); $('#tNoteLast').textContent=`보낸 알림: "${t}" (${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})})`; toast('📢 알림을 보냈어요'); $('#tNote').value=''; }catch(e){ toast('보내지 못했어요'); } };
+  $('#tNoteGo').onclick=()=>sendNote($('#tNote').value);
+  $('#tNote').addEventListener('keydown', e=>{ if(e.key==='Enter') sendNote($('#tNote').value); });
+  app.querySelectorAll('[data-note]').forEach(b=>b.onclick=()=>sendNote(b.dataset.note));
   $('#tEnd').onclick=async()=>{ if(game.state!=='play'){ toast('게임 중이 아니에요'); return; } const r=await dialog({title:'끝내기', msg:'지금 게임을 끝낼까요?', buttons:[['취소',false],['끝내기',true,'danger']]}); if(r.btn) dbM.update(gRef,{state:'end'}); };
   $('#tChat').onclick=async()=>{ const r=await dialog({title:'채팅 지우기', msg:'이 반 채팅 기록을 모두 지울까요?', buttons:[['취소',false],['지우기',true,'danger']]}); if(r.btn){ await dbM.remove(dbM.ref(db,`rooms/${cls}/chat`)).catch(()=>{}); toast('채팅을 지웠어요 (학생 화면은 새로 들어오면 비어 있어요)'); } };
 }
