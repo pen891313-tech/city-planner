@@ -147,6 +147,8 @@ table.sum th{background:#e8edf6}
 .wnotice small{display:block;font-size:12px;font-weight:600;opacity:.75}
 @keyframes noticein{0%{transform:translateX(-50%) scale(.6);opacity:0}60%{transform:translateX(-50%) scale(1.08);opacity:1}100%{transform:translateX(-50%) scale(1)}}
 .wrank{position:absolute;right:10px;top:300px;width:210px;background:rgba(255,248,220,.95);border-radius:8px;padding:6px 10px;font-size:13px;z-index:3;max-height:220px;overflow:auto;line-height:1.6}
+.woverlay.wtop{align-items:flex-start;background:rgba(15,25,50,.12);pointer-events:none}
+.woverlay.wtop .wover-card{pointer-events:auto;padding:12px 18px;max-width:560px}
 .woverlay,.wshop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,25,50,.45);z-index:6;padding:16px}
 .wover-card{background:#fff;border-radius:14px;padding:20px 24px;max-width:520px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.25);max-height:90%;overflow:auto}
 .wcount{font-size:84px;font-weight:700;color:var(--navy);line-height:1}
@@ -1873,7 +1875,7 @@ async function startWalk(app, cls, me){
     noticeEl.style.animation='none'; void noticeEl.offsetWidth; noticeEl.style.animation=''; sfx('notice'); feed(`📢 선생님: <b>${esc(t)}</b>`, 't');
     noticeT=setTimeout(()=>{ noticeEl.style.display='none'; }, 7000); }
   const nameOf=id=> id===pid ? me.n : (remotes[id]?.n||'친구');
-  function overlay(html){ if(!html){ overEl.style.display='none'; return; } overEl.style.display=''; overEl.innerHTML=`<div class="wover-card">${html}</div>`; }
+  function overlay(html, top=false){ overEl.classList.toggle('wtop', !!top); if(!html){ overEl.style.display='none'; return; } overEl.style.display=''; overEl.innerHTML=`<div class="wover-card">${html}</div>`; }
   function toggleShop(force){
     const show = force!==undefined ? force : shopEl.style.display==='none';
     if(!show){ shopEl.style.display='none'; stage.focus(); return; }
@@ -1966,7 +1968,8 @@ async function startWalk(app, cls, me){
       <div>선생님이 <b>시작</b>을 누르면 다 같이 시작해요.</div>
       <div class="muted" style="margin:8px 0">배경: ${THEMES[G.bg]?.label||''} ${G.dur?`· 게임 시간 ${G.dur/60}분`:''} · 동전 ${G.coinOpt==='auto'||!G.coinOpt?'자동(인원×80)':G.coinOpt+'개'}</div>
       <div class="wlobby-list"><b>접속 ${list.length}명</b><br>${list.map(n=>esc(n)).join(', ')}</div>
-      <div class="muted" style="margin-top:10px;line-height:1.7">🪙 ${GOAL}개 모으면 사람으로 변신 · 🫣 등 뒤에서 E키로 잡기 · 🌳 공원·숲은 10초 안전 · 🛒 B키 상점(스탯·아이템·강화) · 🚪 F키 옥상</div>`);
+      <div class="muted" style="margin-top:10px;line-height:1.7">🪙 ${GOAL}개 모으면 사람으로 변신 · 🫣 등 뒤에서 E키로 잡기 · 🌳 공원·숲은 10초 안전 · 🛒 B키 상점(스탯·아이템·강화) · 🚪 F키 옥상</div>
+      <div style="margin-top:6px;font-weight:700;color:var(--navy)">👋 기다리는 동안 <b>E</b>를 눌러 내 팔 길이를 확인해 봐요!</div>`, true);
   }
   function applyGame(g){
     const prevState=G.state, prevRound=G.round;
@@ -2017,12 +2020,12 @@ async function startWalk(app, cls, me){
     return best;
   }
   function tryCatch(){
-    if(!fb||!playing()||S.hu) return;
-    if(mySafe){ toast('🌳 안전 구역 안에서는 잡을 수 없어요'); return; }
-    if(performance.now()<S.cool){ toast('잠깐! 다시 잡으려면 조금 기다려요'); return; }
-    const t=behindTarget();
+    if(S.hu||travelling) return;
+    const real=!!fb && playing(), cool=performance.now()<S.cool;
+    const t = real && !mySafe && !cool ? behindTarget() : null;
     if(!t){ if(performance.now()<(S.whiff||0)) return; S.whiff=performance.now()+450; const R=reach();
-      swingArm(()=>meAv.g.position, ()=>face, R, me.c, false); sfx('swipe'); toast(`👋 내 팔은 ${R.toFixed(1)}m까지 닿아요 · 친구 등 뒤에서 E!`); return; }
+      swingArm(()=>meAv.g.position, ()=>face, R, me.c, false); sfx('swipe');
+      toast(!real ? `👋 연습! 내 팔은 ${R.toFixed(1)}m까지 닿아요` : mySafe ? `🌳 안전 구역에서는 잡을 수 없어요 (팔 길이 ${R.toFixed(1)}m)` : cool ? '잠깐! 다시 잡으려면 조금 기다려요' : `👋 내 팔은 ${R.toFixed(1)}m까지 닿아요 · 친구 등 뒤에서 E!`); return; }
     S.cool=performance.now()+coolMs();
     { const tp=t.rm.av.g.position, d=Math.hypot(tp.x-px,tp.z-pz); swingArm(()=>meAv.g.position, ()=>{ const q=t.rm.av.g.position; return Math.atan2(q.x-px, q.z-pz); }, Math.max(0.6,d-0.2), me.c, true); }
     fb.dbM.push(fb.dbM.ref(fb.db,`rooms/${cls}/events`), {ty:'catch', f:pid, fn:me.n, to:t.k, r:G.round, at:now2(), x:+px.toFixed(2), z:+pz.toFixed(2)});
